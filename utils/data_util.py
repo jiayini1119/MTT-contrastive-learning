@@ -14,8 +14,8 @@ from sas_cl.data_proc.dataset import *
 
 import kornia
 from PIL import Image
-import numpy as np
 from torch.utils.data import Dataset
+
 
 class SupportedDatasets(Enum):
     CIFAR10 = "cifar10"
@@ -206,25 +206,6 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
 
     return Datasets(trainset=trainset, testset=testset, clftrainset=clftrainset, num_classes=num_classes, img_size=img_size, channel=channel)
 
-# class CustomDataset(Dataset):
-#     def __init__(self, images, labels, transform=None):
-#         self.images = images
-#         self.labels = labels
-#         self.transform = transform
-
-#     def __len__(self):
-#         return len(self.images)
-
-#     def __getitem__(self, idx):
-#         image = self.images[idx]
-#         if self.transform:
-#             image = self.transform(image)
-#         label = self.labels[idx]
-#         return image, label
-
-
-from torch.utils.data import Dataset
-
 class CustomDataset(Dataset):
     def __init__(self, images, labels, transform=None, n_augmentations=1):
         self.images = images
@@ -235,12 +216,7 @@ class CustomDataset(Dataset):
     def __len__(self):
         return len(self.images)
 
-    def __getitem__(self, idx):
-        image = self.images[idx]
-        if self.transform:
-            pil_img = Image.fromarray(image)
-            augmented_images = [self.transform(pil_img) for _ in range(self.n_augmentations)]
-        else:
-            augmented_images = [image] * self.n_augmentations
-        label = self.labels[idx]
-        return augmented_images
+    def __getitem__(self, index):
+        img_tensor, _ = self.images[index], self.labels[index]
+        imgs = [self.transform(img_tensor) for _ in range(self.n_augmentations)]
+        return tuple(imgs)

@@ -15,23 +15,47 @@ import glob
 
 def main(args):
     """
-    Initialize Syn dataset D_syn
+    I have a ckpt folder with structure:
+    trajectory 0:
+      - trajectory_0_epoch_0
+      - trajectory_0_epoch_1
+      - trajectory_0_epoch_2
+
+    
+    trajectory 1:
+      - trajectory_1_epoch_0
+      - trajectory_1_epoch_1
+      - trajectory_1_epoch_2
+    
+    trajectory 2:
+      - trajectory_2_epoch_0
+      - trajectory_2_epoch_1
+      - trajectory__epoch_2
+
+    
+    Those are saved duirng training the expert trajectory
+
+    mll.py:
+    Initialize Syn dataset D_syn (TODO)
     Initialize learning rate(not trainable, fixed now)
 
-    for i in range(Iteration):
-        Sample expert trajectory
-        Choose random start epoch
-        Initialize student network with expert params from the expert trajectory
-        Get trainset, clfset, and testset from D_syn
+    optimizer for D_syn
 
-        for j in range(n):
+    for i in range(distillation_step + 1):
+    
+        Sample expert trajectory 
+        Choose random start epoch < max_start_epoch => (initial_trajectory)
+        Initialize student network with expert params from initial_trajectory
+        Get trainset, clfset, and testset from D_syn (TODO, make a class)
+
+        for j in range(N):
             sample a minibatch from the  D_syn 
             simclr training loop
         
-        loss between ending student and expert params
+        get target params
+        loss between student params and expert params
         update D_sync with respect to the loss
     
-    Output: distilled data Dsyn
     """
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -55,13 +79,8 @@ def main(args):
     
     distilled_dataset = CustomDataset(dataset_images, labels, transform=kornia_augmentations)
 
-    # Initialize learning rate
-    syn_lr = args.lr_teacher
-
     optimizer_img = torch.optim.SGD([dataset_images], lr=args.lr_img, momentum=0.5)
     optimizer_img.zero_grad()
-
-    criterion = nn.CrossEntropyLoss().to(device)#?
 
     for i in range(args.distillation_step + 1):
 
@@ -76,11 +95,14 @@ def main(args):
         initial_trajectory = np.random.choice([f for f in matching_files if int(f.split('_epoch_')[-1].split('.pt')[0]) < args.max_start_epoch])
 
         # Initialize student network with expert params from the expert trajectory
-
         net_width, net_depth, net_act, net_norm, net_pooling = 128, 3, 'relu', 'instancenorm', 'avgpooling'
         net = ConvNet(net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling)
 
         net.load_state_dict(torch.load(initial_trajectory))
+
+        num_params = sum([np.prod(p.size()) for p in (net.parameters())])
+        starting_params = [net.state_dict()[key] for key in net.state_dict()]
+
         print("Assigned the initial weight to the student network")
 
         # get train, test, clf data
@@ -121,6 +143,9 @@ def main(args):
             pin_memory=True,
         )
 
+        param_loss_list = []
+        param_dist_list = []
+
         print("***Start simclr training***")
         net = net.to(device)
         critic = critic.to(device)
@@ -144,39 +169,53 @@ def main(args):
             print(f"train_loss: {train_loss}")
             test_acc = trainer.test()
             print(f"test_acc: {test_acc}")
-    
+        
 
-    # After training - udpate Dsync
-    print("Training finished")
+        # After training - udpate Dsync
+        print("Training of the student network finished")
 
-    # find the file with target_params
-    initial_epoch_num = int(initial_trajectory.split('_epoch_')[-1].split('.pt')[0])
-    final_epoch_num = initial_epoch_num + args.expert_epochs
+        # Get target params
+        initial_epoch_num = int(initial_trajectory.split('_epoch_')[-1].split('.pt')[0])
+        final_epoch_num = initial_epoch_num + args.expert_epochs
 
-    final_trajectory_name = f"{selected_directory}_epoch_{final_epoch_num}.pt"
-    final_trajectory_path = os.path.join(trajectories, final_trajectory_name)
+        final_trajectory_name = f"{selected_directory}_epoch_{final_epoch_num}.pt"
+        final_trajectory_path = os.path.join(trajectories, final_trajectory_name)
 
-    if os.path.exists(final_trajectory_path):
-        print(f"Found final trajectory at {final_trajectory_path}")
-    else:
-        print(f"Final trajectory does not exist for epoch {final_epoch_num}")
-    
+        if os.path.exists(final_trajectory_path):
+            print(f"Found final trajectory at {final_trajectory_path}")
+        else:
+            print(f"Final trajectory does not exist for epoch {final_epoch_num}")
 
-    final_state_dict = torch.load(final_trajectory_path)
-    current_state_dict = net.state_dict()
+        final_state_dict = torch.load(final_trajectory_path)
+        current_state_dict = net.state_dict()
 
-    
+        target_params = [final_state_dict[key] for key in final_state_dict]
+        student_params = [current_state_dict[key] for key in current_state_dict]
 
+        param_loss = torch.tensor(0.0).to(args.device)
+        param_dist = torch.tensor(0.0).to(args.device)
 
+        param_loss += torch.nn.functional.mse_loss(student_params, target_params, reduction="sum")
+        param_dist += torch.nn.functional.mse_loss(starting_params, target_params, reduction="sum")
 
+        param_loss_list.append(param_loss)
+        param_dist_list.append(param_dist)
 
+        param_loss /= num_params
+        param_dist /= num_params
 
+        param_loss /= param_dist
 
+        grand_loss = param_loss
 
+        optimizer_img.zero_grad()
 
+        grand_loss.backward()
 
+        optimizer_img.step()
 
-
+        for _ in student_params:
+            del _
 
 
 if __name__ == '__main__':
