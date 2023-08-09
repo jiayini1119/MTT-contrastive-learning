@@ -17,9 +17,10 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
 
 import wandb
-from sas.configs import SupportedDatasets, get_datasets
-from sas.evaluate.lbfgs import test_clf
-from sas.util import Random
+# from sas.configs import SupportedDatasets, get_datasets
+from utils.data_util import *
+from sas_cl.evaluate.lbfgs import test_clf
+from sas_cl.util import Random
 from convNet import *
 
 
@@ -34,7 +35,7 @@ def main(rank: int, world_size: int, args: int):
     # WandB Logging
     if not args.distributed or rank == 0:
         wandb.init(
-            project="data-efficient-contrastive-learning-linear-probe",
+            project="mtt-contrastive-learning-linear-probe",
             config=args
         )
 
@@ -76,6 +77,8 @@ def main(rank: int, world_size: int, args: int):
     net_width, net_depth, net_act, net_norm, net_pooling = 128, 3, 'relu', 'instancenorm', 'avgpooling'
     net = ConvNet(net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling)
 
+    net.to(device)
+
     clf = nn.Linear(net.representation_dim, datasets.num_classes).to(device)
     if args.distributed:
         clf = DDP(clf, device_ids=[device])
@@ -115,13 +118,12 @@ def main(rank: int, world_size: int, args: int):
     for epoch in range(args.num_epochs):
         train_loss = train_clf(epoch)
         if not args.distributed or rank == 0:
-            acc, top5acc = test_clf(testloader, device, net, clf)
+            acc = test_clf(testloader, device, net, clf)
             wandb.log(
                 {
                     "test":
                     {
                         "acc": acc,
-                        "top5acc": top5acc
                     },
                     "train":
                     {
@@ -164,7 +166,7 @@ if __name__ == "__main__":
     parser.add_argument('--lr', default=0.01, type=float, help='learning rate')
     parser.add_argument("--momentum", default=0.9, type=float, help='SGD momentum')
     parser.add_argument("--batch-size", type=int, default=512, help='Training batch size')
-    parser.add_argument("--num-epochs", type=int, default=2, help='Number of training epochs')
+    parser.add_argument("--num-epochs", type=int, default=50, help='Number of training epochs')
     parser.add_argument("--weight-decay", type=float, default=1e-6, help='Weight decay on the linear classifier')
     parser.add_argument("--nesterov", action="store_true", help="Turn on Nesterov style momentum")
     parser.add_argument("--encoder", type=str, default='ckpt.pth', help='Pretrained encoder')

@@ -13,6 +13,8 @@ class ConvNet(nn.Module):
         self.representation_dim = num_feat
         if num_classes is not None:
             self.classifier = nn.Linear(num_feat, num_classes)
+        else:
+            self.classifier = None
 
     def forward(self, x):
         # print("MODEL DATA ON: ", x.get_device(), "MODEL PARAMS ON: ", self.classifier.weight.data.get_device())

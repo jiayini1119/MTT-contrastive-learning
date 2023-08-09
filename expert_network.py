@@ -17,22 +17,23 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
 import wandb
 
-from sas.configs import SupportedDatasets, get_datasets
-from sas.projection_heads.critic import LinearCritic
-from sas.trainer import Trainer
-from sas.util import Random
-
+from sas_cl.projection_heads.critic import LinearCritic
+from sas_cl.trainer import Trainer
+from sas_cl.util import Random
+from utils.data_util import *
 from convNet import *
+import matplotlib.pyplot as plt
 
 def main(rank: int, world_size: int, args):
 
     if not os.path.exists('ckpt'):
-        os.mkdir('checkpoint')
+        os.mkdir('ckpt')
     
     all_trajectories = []
 
     for expert_index in range(args.num_expert):
         trajectory = []
+        test_accuracies = []
 
         # Determine Device 
         device = rank
@@ -44,7 +45,7 @@ def main(rank: int, world_size: int, args):
         # WandB Logging
         if not args.distributed or rank == 0:
             wandb.init(
-                project="data-efficient-contrastive-learning",
+                project="mtt-contrastive-learning",
                 config=args
             )
 
@@ -156,6 +157,7 @@ def main(rank: int, world_size: int, args):
 
             if (not args.distributed or rank == 0) and ((epoch + 1) % args.test_freq == 0):
                 test_acc = trainer.test()
+                test_accuracies.append(test_acc)
                 print(f"test_acc: {test_acc}")
                 wandb.log(
                     data={"test": {
@@ -181,6 +183,14 @@ def main(rank: int, world_size: int, args):
 
         if args.distributed:
             destroy_process_group()
+
+        plt.plot(range(1, args.num_epochs + 1, args.test_freq), test_accuracies, label=f'Expert {expert_index}')
+        plt.xlabel('Epoch')
+        plt.ylabel('Test Accuracy')
+        plt.legend()
+        plot_name = f'{expert_index}_{DT_STRING}_{args.dataset}_plot.png'
+        plt.savefig(plot_name)
+        print(f'Saved plot as {plot_name}')
     
     all_trajectories.append(trajectory)
 
@@ -218,7 +228,7 @@ if __name__ == "__main__":
     parser.add_argument("--device-ids", nargs = "+", default = None, help = "Specify device ids if using multiple gpus")
     parser.add_argument('--port', type=int, default=random.randint(49152, 65535), help="free port to use")
     parser.add_argument('--seed', type=int, default=0, help="Seed for randomness")
-    parser.add_argument('--num_expert', type=int, default=5, help="number of expert trajectories")
+    parser.add_argument('--num_expert', type=int, default=1, help="number of expert trajectories")
 
     # Parse arguments
     args = parser.parse_args()
