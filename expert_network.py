@@ -22,17 +22,16 @@ from sas_cl.trainer import Trainer
 from sas_cl.util import Random
 from utils.data_util import *
 from convNet import *
+
 import matplotlib.pyplot as plt
 
 def main(rank: int, world_size: int, args):
-
-    if not os.path.exists('ckpt'):
-        os.mkdir('ckpt')
     
-    all_trajectories = []
-
     for expert_index in range(args.num_expert):
-        trajectory = []
+
+        expert_dir = os.path.join('ckpt', f'trajectory_{expert_index}')
+        os.makedirs(expert_dir, exist_ok=True)
+        
         test_accuracies = []
 
         # Determine Device 
@@ -155,7 +154,8 @@ def main(rank: int, world_size: int, args):
                     step=epoch
                 )
 
-            if (not args.distributed or rank == 0) and ((epoch + 1) % args.test_freq == 0):
+            # if (not args.distributed or rank == 0) and ((epoch + 1) % args.test_freq == 0):
+            if (not args.distributed or rank == 0):
                 test_acc = trainer.test()
                 test_accuracies.append(test_acc)
                 print(f"test_acc: {test_acc}")
@@ -170,7 +170,9 @@ def main(rank: int, world_size: int, args):
             if ((not args.distributed or rank == 0) and (epoch + 1) % args.checkpoint_freq == 0):
                 trainer.save_checkpoint(prefix=f"{DT_STRING}-{args.dataset}-{args.arch}-{epoch}")
             
-            trajectory.append([p.detach().cpu() for p in net.parameters()])
+
+            epoch_file_name = os.path.join(expert_dir, f'trajectory_{expert_index}_epoch_{epoch}.pt')
+            torch.save(net.state_dict(), epoch_file_name)
 
         if not args.distributed or rank == 0:
             print(f"best_test_acc: {trainer.best_acc}")
@@ -184,23 +186,13 @@ def main(rank: int, world_size: int, args):
         if args.distributed:
             destroy_process_group()
 
-        plt.plot(range(1, args.num_epochs + 1, args.test_freq), test_accuracies, label=f'Expert {expert_index}')
+        plt.plot(range(1, args.num_epochs + 1), test_accuracies, label=f'Expert {expert_index}')
         plt.xlabel('Epoch')
         plt.ylabel('Test Accuracy')
         plt.legend()
         plot_name = f'{expert_index}_{DT_STRING}_{args.dataset}_plot.png'
         plt.savefig(plot_name)
         print(f'Saved plot as {plot_name}')
-    
-    all_trajectories.append(trajectory)
-
-    if len(all_trajectories) == args.num_expert:
-        n = 0
-        while os.path.exists(os.path.join('ckpt', f"replay_buffer_{DT_STRING}_{n}_{args.dataset}.pt")):
-            n += 1
-        save_path = os.path.join('ckpt', f"replay_buffer_{DT_STRING}_{n}_{args.dataset}.pt")
-        print("Saving {}".format(save_path))
-        torch.save(all_trajectories, save_path)
 
 ##############################################################
 # Distributed Training Setup
@@ -213,11 +205,9 @@ def ddp_setup(rank: int, world_size: int, port: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='PyTorch Contrastive Learning.')
     parser.add_argument('--temperature', type=float, default=0.5, help='InfoNCE temperature')
-    parser.add_argument("--batch-size", type=int, default=512, help='Training batch size')
-    parser.add_argument("--lr", type=float, default=1e-3, help='learning rate')
-    parser.add_argument("--num-epochs", type=int, default=400, help='Number of training epochs')
-    parser.add_argument("--arch", type=str, default='resnet18', help='Encoder architecture',
-                        choices=['resnet10', 'resnet18', 'resnet34', 'resnet50'])
+    parser.add_argument("--batch-size", type=int, default=1024, help='Training batch size')
+    parser.add_argument("--lr", type=float, default=0.001, help='learning rate')
+    parser.add_argument("--num-epochs", type=int, default=50, help='Number of training epochs')
     parser.add_argument("--test-freq", type=int, default=10, help='Frequency to fit a linear clf with L-BFGS for testing'
                                                                 'Not appropriate for large datasets. Set 0 to avoid '
                                                                 'classifier only training here.')

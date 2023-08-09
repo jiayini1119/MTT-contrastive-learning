@@ -1,3 +1,6 @@
 *.pt
 *.pyc
+*.png
 wandb
+
+data/

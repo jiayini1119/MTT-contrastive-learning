@@ -13,6 +13,9 @@ from sas_cl.data_proc.augmentation import ColourDistortion
 from sas_cl.data_proc.dataset import *
 
 import kornia
+from PIL import Image
+import numpy as np
+from torch.utils.data import Dataset
 
 class SupportedDatasets(Enum):
     CIFAR10 = "cifar10"
@@ -21,7 +24,7 @@ class SupportedDatasets(Enum):
     IMAGENET = "imagenet"
     STL10 = "stl10"
 
-Datasets = namedtuple('Datasets', 'trainset testset clftrainset num_classes stem')
+Datasets = namedtuple('Datasets', 'trainset testset clftrainset num_classes img_size channel')
 
 def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=False, num_positive=2):
 
@@ -51,22 +54,30 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
 
     # Data
     if dataset == SupportedDatasets.STL10.value:
+        channel = 3
         img_size = 96
     elif dataset == SupportedDatasets.IMAGENET.value:
+        channel = 3
         img_size = 224
     elif dataset == SupportedDatasets.TINY_IMAGENET.value:
-       img_size = 64
+        channel = 3
+        img_size = 64
     else:
+        channel = 3
         img_size = 32
 
     if dataset == SupportedDatasets.CIFAR10.value or dataset == SupportedDatasets.CIFAR100.value:
+        kornia_augmentations = kornia.augmentation.AugmentationSequential(
+            kornia.augmentation.RandomResizedCrop((32, 32), scale=(0.08, 1.0), same_on_batch=True, keepdim=True),
+            kornia.augmentation.RandomHorizontalFlip(same_on_batch=True, keepdim=True),
+            kornia.augmentation.ColorJiggle(0.4, 0.4, 0.4, 0.1, same_on_batch=True, p=0.8, keepdim=True),
+            kornia.augmentation.RandomGrayscale(same_on_batch=True, p=0.2, keepdim=True),
+            kornia.augmentation.Normalize(*CACHED_MEAN_STD[dataset],keepdim=True),
+        )
+
         transform_train = transforms.Compose([
-            kornia.augmentation.RandomResizedCrop((32, 32), scale=(0.08, 1.0), same_on_batch=True),
-            kornia.augmentation.RandomHorizontalFlip(same_on_batch=True),
-            kornia.augmentation.ColorJiggle(0.4, 0.4, 0.4, 0.1, same_on_batch=True, p=0.8),
-            kornia.augmentation.RandomGrayscale(same_on_batch=True, p=0.2),
-            transforms.ToTensor(),
-            transforms.Normalize(*CACHED_MEAN_STD[dataset]),
+            transforms.ToTensor(), 
+            kornia_augmentations,
         ])
 
     else:
@@ -94,14 +105,18 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
     if augment_clf_train:
 
         if dataset == SupportedDatasets.CIFAR10.value or dataset == SupportedDatasets.CIFAR100.value:
-            transform_clftrain = transforms.Compose([
-                kornia.augmentation.RandomResizedCrop((32, 32), scale=(0.08, 1.0), same_on_batch=True),
-                kornia.augmentation.RandomHorizontalFlip(same_on_batch=True),
-                kornia.augmentation.ColorJiggle(0.4, 0.4, 0.4, 0.1, same_on_batch=True, p=0.8),
-                kornia.augmentation.RandomGrayscale(same_on_batch=True, p=0.2),
-                transforms.ToTensor(),
-                transforms.Normalize(*CACHED_MEAN_STD[dataset]),
-        ])
+            kornia_augmentations = kornia.augmentation.AugmentationSequential(
+                kornia.augmentation.RandomResizedCrop((32, 32), scale=(0.08, 1.0), same_on_batch=True, keepdim=True),
+                kornia.augmentation.RandomHorizontalFlip(same_on_batch=True, keepdim=True),
+                kornia.augmentation.ColorJiggle(0.4, 0.4, 0.4, 0.1, same_on_batch=True, p=0.8, keepdim=True),
+                kornia.augmentation.RandomGrayscale(same_on_batch=True, p=0.2, keepdim=True),
+                kornia.augmentation.Normalize(*CACHED_MEAN_STD[dataset],keepdim=True),
+            )
+
+            transform_train = transforms.Compose([
+                transforms.ToTensor(), 
+                kornia_augmentations,
+            ])
 
         else:
             transform_clftrain = transforms.Compose([
@@ -117,14 +132,18 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
     if augment_clf_train:
 
         if dataset == SupportedDatasets.CIFAR10.value or dataset == SupportedDatasets.CIFAR100.value:
-            transform_clftrain = transforms.Compose([
-                kornia.augmentation.RandomResizedCrop((32, 32), scale=(0.08, 1.0), same_on_batch=True),
-                kornia.augmentation.RandomHorizontalFlip(same_on_batch=True),
-                kornia.augmentation.ColorJiggle(0.4, 0.4, 0.4, 0.1, same_on_batch=True, p=0.8),
-                kornia.augmentation.RandomGrayscale(same_on_batch=True, p=0.2),
-                transforms.ToTensor(),
-                transforms.Normalize(*CACHED_MEAN_STD[dataset]),
-        ])
+            kornia_augmentations = kornia.augmentation.AugmentationSequential(
+                kornia.augmentation.RandomResizedCrop((32, 32), scale=(0.08, 1.0), same_on_batch=True, keepdim=True),
+                kornia.augmentation.RandomHorizontalFlip(same_on_batch=True, keepdim=True),
+                kornia.augmentation.ColorJiggle(0.4, 0.4, 0.4, 0.1, same_on_batch=True, p=0.8, keepdim=True),
+                kornia.augmentation.RandomGrayscale(same_on_batch=True, p=0.2, keepdim=True),
+                kornia.augmentation.Normalize(*CACHED_MEAN_STD[dataset],keepdim=True),
+            )
+
+            transform_train = transforms.Compose([
+                transforms.ToTensor(), 
+                kornia_augmentations,
+            ])
 
         else:
             transform_clftrain = transforms.Compose([
@@ -138,7 +157,7 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
         transform_clftrain = transform_test
 
 
-    trainset = testset = clftrainset = num_classes = stem = None
+    trainset = testset = clftrainset = num_classes = None
     
     if dataset == SupportedDatasets.CIFAR100.value:
         if add_indices_to_data:
@@ -185,4 +204,43 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
         testset = ImageNet(root=f"{root}test/", transform=transform_clftrain)     
         num_classes = 1000
 
-    return Datasets(trainset=trainset, testset=testset, clftrainset=clftrainset, num_classes=num_classes, stem=stem)
+    return Datasets(trainset=trainset, testset=testset, clftrainset=clftrainset, num_classes=num_classes, img_size=img_size, channel=channel)
+
+# class CustomDataset(Dataset):
+#     def __init__(self, images, labels, transform=None):
+#         self.images = images
+#         self.labels = labels
+#         self.transform = transform
+
+#     def __len__(self):
+#         return len(self.images)
+
+#     def __getitem__(self, idx):
+#         image = self.images[idx]
+#         if self.transform:
+#             image = self.transform(image)
+#         label = self.labels[idx]
+#         return image, label
+
+
+from torch.utils.data import Dataset
+
+class CustomDataset(Dataset):
+    def __init__(self, images, labels, transform=None, n_augmentations=1):
+        self.images = images
+        self.labels = labels
+        self.transform = transform
+        self.n_augmentations = n_augmentations
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        image = self.images[idx]
+        if self.transform:
+            pil_img = Image.fromarray(image)
+            augmented_images = [self.transform(pil_img) for _ in range(self.n_augmentations)]
+        else:
+            augmented_images = [image] * self.n_augmentations
+        label = self.labels[idx]
+        return augmented_images
