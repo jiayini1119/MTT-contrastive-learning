@@ -96,6 +96,9 @@ def main(rank: int, world_size: int, args):
             pin_memory=True,
         )
 
+        print(trainset)
+
+
         clftrainloader = torch.utils.data.DataLoader(
             dataset=datasets.clftrainset,
             batch_size=args.batch_size, 
@@ -111,7 +114,7 @@ def main(rank: int, world_size: int, args):
             num_workers=4,
             pin_memory=True,
         )
-        
+
         ##############################################################
         # Main Loop (Train, Test)
         ##############################################################
@@ -206,8 +209,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='PyTorch Contrastive Learning.')
     parser.add_argument('--temperature', type=float, default=0.5, help='InfoNCE temperature')
     parser.add_argument("--batch-size", type=int, default=1024, help='Training batch size')
-    parser.add_argument("--lr", type=float, default=0.001, help='learning rate')
-    parser.add_argument("--num-epochs", type=int, default=50, help='Number of training epochs')
+    parser.add_argument("--lr", type=float, default=0.00001, help='learning rate')
+    parser.add_argument("--num-epochs", type=int, default=400, help='Number of training epochs')
     parser.add_argument("--test-freq", type=int, default=10, help='Frequency to fit a linear clf with L-BFGS for testing'
                                                                 'Not appropriate for large datasets. Set 0 to avoid '
                                                                 'classifier only training here.')
