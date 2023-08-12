@@ -17,11 +17,11 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
 import wandb
 
-from sas_cl.projection_heads.critic import LinearCritic
-from sas_cl.trainer import Trainer
-from sas_cl.util import Random
+from projection_heads.critic import LinearCritic
+from trainer import Trainer
+from utils.random import Random
 from utils.data_util import *
-from convNet import *
+from models.convNet import *
 
 import matplotlib.pyplot as plt
 
@@ -96,9 +96,6 @@ def main(rank: int, world_size: int, args):
             pin_memory=True,
         )
 
-        print(trainset)
-
-
         clftrainloader = torch.utils.data.DataLoader(
             dataset=datasets.clftrainset,
             batch_size=args.batch_size, 
@@ -157,8 +154,8 @@ def main(rank: int, world_size: int, args):
                     step=epoch
                 )
 
-            # if (not args.distributed or rank == 0) and ((epoch + 1) % args.test_freq == 0):
-            if (not args.distributed or rank == 0):
+            if (not args.distributed or rank == 0) and ((epoch + 1) % args.test_freq == 0):
+            # if (not args.distributed or rank == 0):
                 test_acc = trainer.test()
                 test_accuracies.append(test_acc)
                 print(f"test_acc: {test_acc}")
@@ -209,13 +206,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='PyTorch Contrastive Learning.')
     parser.add_argument('--temperature', type=float, default=0.5, help='InfoNCE temperature')
     parser.add_argument("--batch-size", type=int, default=1024, help='Training batch size')
-    parser.add_argument("--lr", type=float, default=0.00001, help='learning rate')
+    parser.add_argument("--lr", type=float, default=0.0001, help='learning rate')
     parser.add_argument("--num-epochs", type=int, default=400, help='Number of training epochs')
     parser.add_argument("--test-freq", type=int, default=10, help='Frequency to fit a linear clf with L-BFGS for testing'
                                                                 'Not appropriate for large datasets. Set 0 to avoid '
                                                                 'classifier only training here.')
     parser.add_argument("--checkpoint-freq", type=int, default=10000, help="How often to checkpoint model")
-    parser.add_argument('--dataset', type=str, default=str(SupportedDatasets.CIFAR100.value), help='dataset',
+    parser.add_argument('--dataset', type=str, default=str(SupportedDatasets.CIFAR10.value), help='dataset',
                         choices=[x.value for x in SupportedDatasets])
     parser.add_argument('--device', type=int, default=-1, help="GPU number to use")
     parser.add_argument("--device-ids", nargs = "+", default = None, help = "Specify device ids if using multiple gpus")

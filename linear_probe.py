@@ -21,7 +21,7 @@ import wandb
 from utils.data_util import *
 from sas_cl.evaluate.lbfgs import test_clf
 from sas_cl.util import Random
-from convNet import *
+from models.convNet import *
 
 
 def main(rank: int, world_size: int, args: int):

@@ -1,5 +1,5 @@
 """
-from https://github.com/sjoshi804/sas-data-efficient-contrastive-learning
+Adapted from https://github.com/sjoshi804/sas-data-efficient-contrastive-learning
 """
 
 from enum import Enum
@@ -9,8 +9,8 @@ import torchvision
 import torchvision.transforms as transforms
 
 from collections import namedtuple
-from sas_cl.data_proc.augmentation import ColourDistortion
-from sas_cl.data_proc.dataset import *
+from utils.augmentation import ColourDistortion
+from utils.dataset import *
 
 import kornia
 from PIL import Image
@@ -18,9 +18,6 @@ from torch.utils.data import Dataset
 
 from sklearn.model_selection import train_test_split
 from torchvision import transforms
-
-from torchvision.transforms import ToPILImage
-
 
 
 class SupportedDatasets(Enum):
@@ -72,28 +69,13 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
         channel = 3
         img_size = 32
 
-    if dataset == SupportedDatasets.CIFAR10.value or dataset == SupportedDatasets.CIFAR100.value:
-        kornia_augmentations = kornia.augmentation.AugmentationSequential(
-            kornia.augmentation.RandomResizedCrop((32, 32), scale=(0.08, 1.0), same_on_batch=True, keepdim=True),
-            kornia.augmentation.RandomHorizontalFlip(same_on_batch=True, keepdim=True),
-            kornia.augmentation.ColorJiggle(0.4, 0.4, 0.4, 0.1, same_on_batch=True, p=0.8, keepdim=True),
-            kornia.augmentation.RandomGrayscale(same_on_batch=True, p=0.2, keepdim=True),
-            kornia.augmentation.Normalize(*CACHED_MEAN_STD[dataset],keepdim=True),
-        )
-
-        transform_train = transforms.Compose([
-            transforms.ToTensor(), 
-            kornia_augmentations,
-        ])
-
-    else:
-        transform_train = transforms.Compose([
-            transforms.RandomResizedCrop(img_size, interpolation=Image.BICUBIC),
-            transforms.RandomHorizontalFlip(),
-            ColourDistortion(s=0.5),
-            transforms.ToTensor(),
-            transforms.Normalize(*CACHED_MEAN_STD[dataset]),
-        ])
+    transform_train = transforms.Compose([
+        transforms.RandomResizedCrop(img_size, interpolation=Image.BICUBIC),
+        transforms.RandomHorizontalFlip(),
+        ColourDistortion(s=0.5),
+        transforms.ToTensor(),
+        transforms.Normalize(*CACHED_MEAN_STD[dataset]),
+    ])
 
     if dataset == SupportedDatasets.IMAGENET.value:
         transform_test = transforms.Compose([
@@ -109,59 +91,23 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
         ])
 
     if augment_clf_train:
-
-        if dataset == SupportedDatasets.CIFAR10.value or dataset == SupportedDatasets.CIFAR100.value:
-            kornia_augmentations = kornia.augmentation.AugmentationSequential(
-                kornia.augmentation.RandomResizedCrop((32, 32), scale=(0.08, 1.0), same_on_batch=True, keepdim=True),
-                kornia.augmentation.RandomHorizontalFlip(same_on_batch=True, keepdim=True),
-                kornia.augmentation.ColorJiggle(0.4, 0.4, 0.4, 0.1, same_on_batch=True, p=0.8, keepdim=True),
-                kornia.augmentation.RandomGrayscale(same_on_batch=True, p=0.2, keepdim=True),
-                kornia.augmentation.Normalize(*CACHED_MEAN_STD[dataset],keepdim=True),
-            )
-
-            transform_train = transforms.Compose([
-                transforms.ToTensor(), 
-                kornia_augmentations,
-            ])
-
-        else:
-            transform_clftrain = transforms.Compose([
-                transforms.RandomResizedCrop(img_size, interpolation=Image.BICUBIC),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                transforms.Normalize(*CACHED_MEAN_STD[dataset]),
-            ])
-
+        transform_clftrain = transforms.Compose([
+            transforms.RandomResizedCrop(img_size, interpolation=Image.BICUBIC),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(*CACHED_MEAN_STD[dataset]),
+        ])
     else:
         transform_clftrain = transform_test
-
     if augment_clf_train:
-
-        if dataset == SupportedDatasets.CIFAR10.value or dataset == SupportedDatasets.CIFAR100.value:
-            kornia_augmentations = kornia.augmentation.AugmentationSequential(
-                kornia.augmentation.RandomResizedCrop((32, 32), scale=(0.08, 1.0), same_on_batch=True, keepdim=True),
-                kornia.augmentation.RandomHorizontalFlip(same_on_batch=True, keepdim=True),
-                kornia.augmentation.ColorJiggle(0.4, 0.4, 0.4, 0.1, same_on_batch=True, p=0.8, keepdim=True),
-                kornia.augmentation.RandomGrayscale(same_on_batch=True, p=0.2, keepdim=True),
-                kornia.augmentation.Normalize(*CACHED_MEAN_STD[dataset],keepdim=True),
-            )
-
-            transform_train = transforms.Compose([
-                transforms.ToTensor(), 
-                kornia_augmentations,
-            ])
-
-        else:
-            transform_clftrain = transforms.Compose([
-                transforms.RandomResizedCrop(img_size, interpolation=Image.BICUBIC),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                transforms.Normalize(*CACHED_MEAN_STD[dataset]),
-            ])
-
+        transform_clftrain = transforms.Compose([
+            transforms.RandomResizedCrop(img_size, interpolation=Image.BICUBIC),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(*CACHED_MEAN_STD[dataset]),
+        ])
     else:
         transform_clftrain = transform_test
-
 
     trainset = testset = clftrainset = num_classes = None
     

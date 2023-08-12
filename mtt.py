@@ -2,19 +2,16 @@
 Data Distillation by Matching Training Trajectories for Contrastive Learning
 """
 import argparse
+
+import glob
 from utils.data_util import *
 import numpy as np
-from convNet import *
+from models.convNet import *
 from torch.utils.data import random_split
 import torch.optim as optim
 
-from sas_cl.projection_heads.critic import LinearCritic
-from sas_cl.trainer import Trainer
-
-from torch.utils.data._utils.collate import default_collate
-
-
-import glob
+from projection_heads.critic import LinearCritic
+from trainer import Trainer
 
 def main(args):
     """
