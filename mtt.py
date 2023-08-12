@@ -6,11 +6,10 @@ import argparse
 import glob
 from utils.data_util import *
 import numpy as np
-from models.convNet import *
-from torch.utils.data import random_split
+from models.networks.convNet import *
 import torch.optim as optim
 
-from projection_heads.critic import LinearCritic
+from models.projection_heads.critic import LinearCritic
 from trainer import Trainer
 
 def main(args):
@@ -36,7 +35,8 @@ def main(args):
     Those are saved duirng training the expert trajectory
 
     mll.py:
-    Initialize Syn dataset D_syn (TODO)
+    Initialize Syn dataset D_syn
+       Only train the trainset
     Initialize learning rate(not trainable, fixed now)
 
     optimizer for D_syn
@@ -46,7 +46,7 @@ def main(args):
         Sample expert trajectory 
         Choose random start epoch < max_start_epoch => (initial_trajectory)
         Initialize student network with expert params from initial_trajectory
-        Get trainset, clfset, and testset from D_syn (TODO, make a class)
+        Get trainset, clfset, and testset from D_syn
 
         for j in range(N):
             sample a minibatch from the  D_syn 
@@ -58,8 +58,6 @@ def main(args):
     
     """
 
-    # torch.set_num_threads(1)
-
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     torch.manual_seed(args.seed)
@@ -68,15 +66,22 @@ def main(args):
     # Initialize Syn dataset D_syn
     ori_datasets = get_datasets(args.dataset)
 
-    dataset_images = torch.randn(ori_datasets.num_classes * args.ipc, ori_datasets.channel, ori_datasets.img_size, ori_datasets.img_size)
+    testset = ori_datasets.testset
+
+    clfset = ori_datasets.clftrainset
+
+    trainset_images = torch.randn(ori_datasets.num_classes * args.ipc, ori_datasets.channel, ori_datasets.img_size, ori_datasets.img_size)
     labels = torch.cat([torch.tensor([i] * args.ipc) for i in range(ori_datasets.num_classes)])
-    trainset, clfset, testset = get_custom_dataset(dataset_images, labels, test_size=0.2)
 
-    dataset_images = dataset_images.to(device).detach().requires_grad_(True)
+    trainset = get_custom_dataset(trainset_images, labels)
 
-    optimizer_img = torch.optim.SGD([nn.Parameter(dataset_images)], lr=args.lr_img, momentum=0.5)
+    trainset_images = trainset_images.to(device).detach().requires_grad_(True)
+
+    optimizer_img = torch.optim.SGD([nn.Parameter(trainset_images)], lr=args.lr_img, momentum=0.5)
 
     optimizer_img.zero_grad()
+
+    print(trainset_images.grad)
 
     for i in range(args.distillation_step + 1):
 
@@ -94,10 +99,7 @@ def main(args):
         net_width, net_depth, net_act, net_norm, net_pooling = 128, 3, 'relu', 'instancenorm', 'avgpooling'
         net = ConvNet(net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling)
 
-        # net.load_state_dict(torch.load(initial_trajectory))
         expert_state_dict = torch.load(initial_trajectory)
-        # for key in expert_state_dict:
-        #     expert_state_dict[key] = expert_state_dict[key].detach()
         net.load_state_dict(expert_state_dict)
 
         num_params = sum([np.prod(p.size()) for p in (net.parameters())])
@@ -213,8 +215,8 @@ def main(args):
         optimizer_img.step()
 
         print("dataset grad final")
-        print(dataset_images.requires_grad)
-        print(dataset_images.grad)
+        print(trainset_images.requires_grad)
+        print(trainset_images.grad)
 
         for _ in student_params:
             del _
@@ -222,7 +224,7 @@ def main(args):
     # save the final dataset
     save_dir = "distilled"
     os.makedirs(save_dir, exist_ok=True) 
-    torch.save(dataset_images.cpu(), os.path.join(save_dir, "distilled_images.pt"))
+    torch.save(trainset_images.cpu(), os.path.join(save_dir, "distilled_images.pt"))
     torch.save(labels.cpu(), os.path.join(save_dir, "labels.pt"))
     print("Dataset saved.")
 

@@ -194,13 +194,7 @@ class CustomDatasetAugment(CustomDataset):
            imgs.append(self.transform(img))
         return imgs
 
-def get_custom_dataset(dataset_images, labels, test_size=0.2, num_positive=2):
-    train_images, test_images, train_labels, test_labels = train_test_split(
-        dataset_images, labels, test_size=test_size, random_state=42
-    )
-
-    clf_images, clf_labels = train_images, train_labels
-
+def get_custom_dataset(dataset_images, labels, num_positive=2):
     kornia_augmentations = kornia.augmentation.AugmentationSequential(
         kornia.augmentation.RandomResizedCrop((32, 32), scale=(0.08, 1.0), same_on_batch=True, keepdim=True),
         kornia.augmentation.RandomHorizontalFlip(same_on_batch=True, keepdim=True),
@@ -208,8 +202,7 @@ def get_custom_dataset(dataset_images, labels, test_size=0.2, num_positive=2):
         kornia.augmentation.RandomGrayscale(same_on_batch=True, p=0.2, keepdim=True),
         # Normalize?
     )
-    trainset = CustomDatasetAugment(images=train_images, labels=train_labels, transform=kornia_augmentations, n_augmentations=num_positive)
-    clfset = CustomDataset(images=clf_images, labels=clf_labels, transform=None)
-    testset = CustomDataset(images=test_images, labels=test_labels, transform=None)
 
-    return trainset, clfset, testset
+    trainset = CustomDatasetAugment(images=dataset_images, labels=labels, transform=kornia_augmentations, n_augmentations=num_positive)
+
+    return trainset

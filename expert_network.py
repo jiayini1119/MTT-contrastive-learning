@@ -17,11 +17,11 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
 import wandb
 
-from projection_heads.critic import LinearCritic
+from models.projection_heads.critic import LinearCritic
 from trainer import Trainer
 from utils.random import Random
 from utils.data_util import *
-from models.convNet import *
+from models.networks.convNet import *
 
 import matplotlib.pyplot as plt
 
@@ -206,7 +206,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='PyTorch Contrastive Learning.')
     parser.add_argument('--temperature', type=float, default=0.5, help='InfoNCE temperature')
     parser.add_argument("--batch-size", type=int, default=1024, help='Training batch size')
-    parser.add_argument("--lr", type=float, default=0.0001, help='learning rate')
+    parser.add_argument("--lr", type=float, default=0.00001, help='learning rate')
     parser.add_argument("--num-epochs", type=int, default=400, help='Number of training epochs')
     parser.add_argument("--test-freq", type=int, default=10, help='Frequency to fit a linear clf with L-BFGS for testing'
                                                                 'Not appropriate for large datasets. Set 0 to avoid '

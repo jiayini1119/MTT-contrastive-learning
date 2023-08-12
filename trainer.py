@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from evaluate.lbfgs import encode_train_set, train_clf, test_clf
-from projection_heads.critic import LinearCritic
+from models.projection_heads.critic import LinearCritic
 
 class Trainer():
     def __init__(
