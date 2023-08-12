@@ -141,6 +141,8 @@ def main(rank: int, world_size: int, args):
             optimizer=optimizer,
         )
 
+        acc_epoch = 0
+
         for epoch in range(0, args.num_epochs):
             print(f"step: {epoch}")
 
@@ -156,6 +158,7 @@ def main(rank: int, world_size: int, args):
 
             if (not args.distributed or rank == 0) and ((epoch + 1) % args.test_freq == 0):
             # if (not args.distributed or rank == 0):
+                acc_epoch += 1
                 test_acc = trainer.test()
                 test_accuracies.append(test_acc)
                 print(f"test_acc: {test_acc}")
@@ -186,7 +189,7 @@ def main(rank: int, world_size: int, args):
         if args.distributed:
             destroy_process_group()
 
-        plt.plot(range(1, args.num_epochs + 1), test_accuracies, label=f'Expert {expert_index}')
+        plt.plot(range(1, acc_epoch + 1), test_accuracies, label=f'Expert {expert_index}')
         plt.xlabel('Epoch')
         plt.ylabel('Test Accuracy')
         plt.legend()
@@ -207,10 +210,8 @@ if __name__ == "__main__":
     parser.add_argument('--temperature', type=float, default=0.5, help='InfoNCE temperature')
     parser.add_argument("--batch-size", type=int, default=1024, help='Training batch size')
     parser.add_argument("--lr", type=float, default=0.00001, help='learning rate')
-    parser.add_argument("--num-epochs", type=int, default=400, help='Number of training epochs')
-    parser.add_argument("--test-freq", type=int, default=10, help='Frequency to fit a linear clf with L-BFGS for testing'
-                                                                'Not appropriate for large datasets. Set 0 to avoid '
-                                                                'classifier only training here.')
+    parser.add_argument("--num-epochs", type=int, default=40, help='Number of training epochs')
+    parser.add_argument("--test-freq", type=int, default=1, help='Frequency to fit a linear clf with L-BFGS for testing')
     parser.add_argument("--checkpoint-freq", type=int, default=10000, help="How often to checkpoint model")
     parser.add_argument('--dataset', type=str, default=str(SupportedDatasets.CIFAR10.value), help='dataset',
                         choices=[x.value for x in SupportedDatasets])

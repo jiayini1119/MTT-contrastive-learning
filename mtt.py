@@ -58,7 +58,8 @@ def main(args):
     
     """
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = "cpu"
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -73,15 +74,17 @@ def main(args):
     trainset_images = torch.randn(ori_datasets.num_classes * args.ipc, ori_datasets.channel, ori_datasets.img_size, ori_datasets.img_size)
     labels = torch.cat([torch.tensor([i] * args.ipc) for i in range(ori_datasets.num_classes)])
 
-    trainset = get_custom_dataset(trainset_images, labels)
+    trainset = get_custom_dataset(trainset_images, labels, device)
 
-    trainset_images = trainset_images.to(device).detach().requires_grad_(True)
+    trainset.images = trainset.images.to(device).detach().requires_grad_(True)
 
-    optimizer_img = torch.optim.SGD([nn.Parameter(trainset_images)], lr=args.lr_img, momentum=0.5)
+    optimizer_img = torch.optim.SGD([nn.Parameter(trainset.images)], lr=args.lr_img, momentum=0.5)
 
     optimizer_img.zero_grad()
 
-    print(trainset_images.grad)
+    print(trainset.images.requires_grad)
+
+    print(trainset.images.grad)
 
     for i in range(args.distillation_step + 1):
 
@@ -215,8 +218,8 @@ def main(args):
         optimizer_img.step()
 
         print("dataset grad final")
-        print(trainset_images.requires_grad)
-        print(trainset_images.grad)
+        print(trainset.images.requires_grad)
+        print(trainset.images.grad)
 
         for _ in student_params:
             del _
@@ -224,7 +227,7 @@ def main(args):
     # save the final dataset
     save_dir = "distilled"
     os.makedirs(save_dir, exist_ok=True) 
-    torch.save(trainset_images.cpu(), os.path.join(save_dir, "distilled_images.pt"))
+    torch.save(trainset.images.cpu(), os.path.join(save_dir, "distilled_images.pt"))
     torch.save(labels.cpu(), os.path.join(save_dir, "labels.pt"))
     print("Dataset saved.")
 

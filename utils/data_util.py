@@ -158,43 +158,43 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
 
     return Datasets(trainset=trainset, testset=testset, clftrainset=clftrainset, num_classes=num_classes, img_size=img_size, channel=channel)
 
-class CustomDataset(Dataset):
-    def __init__(self, images, labels, transform):
-        self.images = images
-        self.labels = labels
-        self.transform = transform
+# class CustomDataset(Dataset):
+#     def __init__(self, images, labels, transform):
+#         self.images = images
+#         self.labels = labels
+#         self.transform = transform
 
-    def __len__(self):
-        return len(self.images)
+#     def __len__(self):
+#         return len(self.images)
 
-    def __getitem__(self, idx):
-        img, target = self.images[idx], self.labels[idx]
-        if self.transform is not None:
-            img = self.transform(img)
+#     def __getitem__(self, idx):
+#         img, target = self.images[idx], self.labels[idx]
+#         if self.transform is not None:
+#             img = self.transform(img)
 
-        return img, target
+#         return img, target
     
 
-class CustomDatasetAugment(CustomDataset):
-    def __init__(self, images, labels, transform, n_augmentations: 2):
-        super().__init__(
-            images=images,
-            labels=labels,
-            transform=transform,
-        )
+class CustomDatasetAugment(Dataset):
+    def __init__(self, images, labels, device, transform, n_augmentations: 2):
+        self.images = images.to(device)
+        self.labels = labels.to(device)
+        self.device = device
+        self.transform = transform
         self.n_augmentations = n_augmentations
 
     def __len__(self):
-        return self.images.shape[0]
+        return len(self.images)
     
     def __getitem__(self, idx):
         img, _ = self.images[idx], self.labels[idx]
+        img.to(self.device)
         imgs = []
         for _ in range(self.n_augmentations):
            imgs.append(self.transform(img))
         return imgs
 
-def get_custom_dataset(dataset_images, labels, num_positive=2):
+def get_custom_dataset(dataset_images, labels, device, num_positive=2):
     kornia_augmentations = kornia.augmentation.AugmentationSequential(
         kornia.augmentation.RandomResizedCrop((32, 32), scale=(0.08, 1.0), same_on_batch=True, keepdim=True),
         kornia.augmentation.RandomHorizontalFlip(same_on_batch=True, keepdim=True),
@@ -203,6 +203,6 @@ def get_custom_dataset(dataset_images, labels, num_positive=2):
         # Normalize?
     )
 
-    trainset = CustomDatasetAugment(images=dataset_images, labels=labels, transform=kornia_augmentations, n_augmentations=num_positive)
+    trainset = CustomDatasetAugment(images=dataset_images, labels=labels, device=device, transform=kornia_augmentations, n_augmentations=num_positive)
 
     return trainset

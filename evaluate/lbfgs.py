@@ -75,7 +75,7 @@ def encode_train_set_projection(trainloader, device, net, critic):
     X = torch.cat(store, dim=0)
     return X
 
-def train_clf(X, y, representation_dim, num_classes, device, reg_weight=1e-4, iter=500):
+def train_clf(X, y, representation_dim, num_classes, device, reg_weight=1e-5, iter=500):
     print('\nL2 Regularization weight: %g' % reg_weight)
 
     criterion = nn.CrossEntropyLoss()
