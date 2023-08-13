@@ -136,3 +136,62 @@ class Trainer():
         else:
             torch.save(self.net, f"{prefix}-net.pt")
         torch.save(self.critic, f"{prefix}-critic.pt")
+
+
+class SynTrainer(Trainer):
+    def __init__(
+        self,
+        trainset_images: Tensor,
+        labels: Tensor,
+        batch_size: int,
+        n_augmentations: int,
+        transform,
+        *args,
+        **kwargs
+    ):
+        super().__init__(*args, trainloader=None, **kwargs)
+        self.trainset_images = trainset_images.requires_grad_(True)
+        self.labels = labels
+        self.batch_size = batch_size
+        self.n_augmentations = n_augmentations
+        self.transform = transform
+
+    def train(self):
+        self.net.train()
+        self.critic.train()
+
+        train_loss = 0
+        total_samples = len(self.trainset_images)
+        num_batches = (total_samples + self.batch_size - 1) // self.batch_size
+        t = tqdm(range(num_batches), desc='Loss: **** ', bar_format='{desc}{bar}{r_bar}')
+
+        indices = torch.randperm(total_samples)
+
+        for batch_idx in t:
+            start_idx = batch_idx * self.batch_size
+            end_idx = min((batch_idx + 1) * self.batch_size, total_samples)
+
+            these_indices = indices[start_idx:end_idx]
+
+            train_x = self.trainset_images[these_indices].to(self.device)
+
+            inputs = []
+
+            for _ in range(self.n_augmentations):
+                inputs.append(self.transform(train_x))
+
+            num_positive = len(inputs)
+            x = torch.cat(inputs, dim=0).to(self.device)
+            self.encoder_optimizer.zero_grad()
+            z = self.net(x)
+            loss = self.un_supcon_loss(z, num_positive)
+            loss.backward()
+            self.encoder_optimizer.step()
+            train_loss += loss.item()
+            t.set_description('Loss: %.3f ' % (train_loss / (batch_idx + 1)))
+
+        if self.lr_scheduler is not None:
+            self.lr_scheduler.step()
+            print("lr:", self.scale_lr * self.lr_scheduler.get_last_lr()[0])
+
+        return train_loss / num_batches

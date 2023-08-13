@@ -15,8 +15,6 @@ from utils.dataset import *
 import kornia
 from PIL import Image
 from torch.utils.data import Dataset
-
-from sklearn.model_selection import train_test_split
 from torchvision import transforms
 
 
@@ -157,24 +155,7 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
         num_classes = 1000
 
     return Datasets(trainset=trainset, testset=testset, clftrainset=clftrainset, num_classes=num_classes, img_size=img_size, channel=channel)
-
-# class CustomDataset(Dataset):
-#     def __init__(self, images, labels, transform):
-#         self.images = images
-#         self.labels = labels
-#         self.transform = transform
-
-#     def __len__(self):
-#         return len(self.images)
-
-#     def __getitem__(self, idx):
-#         img, target = self.images[idx], self.labels[idx]
-#         if self.transform is not None:
-#             img = self.transform(img)
-
-#         return img, target
     
-
 class CustomDatasetAugment(Dataset):
     def __init__(self, images, labels, device, transform, n_augmentations: 2):
         self.images = images.to(device)

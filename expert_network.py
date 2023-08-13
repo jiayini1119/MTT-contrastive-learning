@@ -44,7 +44,7 @@ def main(rank: int, world_size: int, args):
         # WandB Logging
         if not args.distributed or rank == 0:
             wandb.init(
-                project="mtt-contrastive-learning",
+                project="training-expert-network",
                 config=args
             )
 

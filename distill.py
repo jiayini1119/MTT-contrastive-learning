@@ -2,15 +2,17 @@
 Data Distillation by Matching Training Trajectories for Contrastive Learning
 """
 import argparse
-
 import glob
+import wandb
+
 from utils.data_util import *
 import numpy as np
 from models.networks.convNet import *
+from utils.augmentation import KorniaAugmentation
 import torch.optim as optim
 
 from models.projection_heads.critic import LinearCritic
-from trainer import Trainer
+from trainer import SynTrainer
 
 def main(args):
     """
@@ -58,8 +60,12 @@ def main(args):
     
     """
 
-    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    device = "cpu"
+    wandb.init(
+        project="data-distillation-by-mtt-contrastive-learning",
+        config=args
+    )
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -74,19 +80,13 @@ def main(args):
     trainset_images = torch.randn(ori_datasets.num_classes * args.ipc, ori_datasets.channel, ori_datasets.img_size, ori_datasets.img_size)
     labels = torch.cat([torch.tensor([i] * args.ipc) for i in range(ori_datasets.num_classes)])
 
-    trainset = get_custom_dataset(trainset_images, labels, device)
+    trainset_images = trainset_images.to(device).detach().requires_grad_(True)
 
-    trainset.images = trainset.images.to(device).detach().requires_grad_(True)
-
-    optimizer_img = torch.optim.SGD([nn.Parameter(trainset.images)], lr=args.lr_img, momentum=0.5)
+    optimizer_img = torch.optim.SGD([nn.Parameter(trainset_images)], lr=args.lr_img, momentum=0.5)
 
     optimizer_img.zero_grad()
 
-    print(trainset.images.requires_grad)
-
-    print(trainset.images.grad)
-
-    for i in range(args.distillation_step + 1):
+    for _ in range(args.distillation_step + 1):
 
         # sample an expert trajectory
         subdirectories = [d for d in os.listdir('ckpt') if os.path.isdir(os.path.join('ckpt', d))]
@@ -117,14 +117,6 @@ def main(args):
         if args.dataset == SupportedDatasets.TINY_IMAGENET.value:
             optimizer_simclr = optim.Adam(list(net.parameters()) + list(critic.parameters()), lr=2 * args.lr, weight_decay=1e-6)
 
-        trainloader = torch.utils.data.DataLoader(
-            dataset=trainset,
-            batch_size=args.batch_size,
-            shuffle=False,
-            num_workers=5,
-            pin_memory=True,
-        )
-
         clftrainloader = torch.utils.data.DataLoader(
             dataset=clfset,
             batch_size=args.batch_size, 
@@ -141,20 +133,23 @@ def main(args):
             pin_memory=True,
         )
 
-        param_loss_list = []
-        param_dist_list = []
-
+        # synclr training
         print("***Start simclr training***")
         net = net.to(device)
         critic = critic.to(device)
 
-        # synclr training
-        trainer = Trainer(
+        kornia_augmentations = KorniaAugmentation(dataset=args.dataset).to(device)
+
+        trainer = SynTrainer(
+            trainset_images=trainset_images,
+            labels=labels,
+            batch_size = args.batch_size,
+            n_augmentations=2,
+            transform=kornia_augmentations,
             device=device,
             distributed=False,
             net=net,
             critic=critic,
-            trainloader=trainloader,
             clftrainloader=clftrainloader,
             testloader=testloader,
             num_classes=ori_datasets.num_classes,
@@ -165,8 +160,20 @@ def main(args):
             print(f"step: {epoch}")
             train_loss = trainer.train()
             print(f"train_loss: {train_loss}")
+            wandb.log(
+                data={"train": {
+                "loss": train_loss,
+                }},
+                step=epoch
+            )
             test_acc = trainer.test()
             print(f"test_acc: {test_acc}")
+            wandb.log(
+                data={"test": {
+                "acc": test_acc,
+                }},
+                step=epoch
+            )
         
 
         # After training - udpate Dsync
@@ -201,15 +208,10 @@ def main(args):
         param_loss += torch.nn.functional.mse_loss(student_params, target_params, reduction="sum")
         param_dist += torch.nn.functional.mse_loss(starting_params, target_params, reduction="sum")
 
-        param_loss_list.append(param_loss)
-        param_dist_list.append(param_dist)
-
         param_loss /= num_params
         param_dist /= num_params
 
         param_loss /= param_dist
-
-
         grand_loss = param_loss
 
         optimizer_img.zero_grad()
@@ -218,8 +220,8 @@ def main(args):
         optimizer_img.step()
 
         print("dataset grad final")
-        print(trainset.images.requires_grad)
-        print(trainset.images.grad)
+        print(trainset_images.requires_grad)
+        print(trainset_images.grad)
 
         for _ in student_params:
             del _
@@ -227,29 +229,24 @@ def main(args):
     # save the final dataset
     save_dir = "distilled"
     os.makedirs(save_dir, exist_ok=True) 
-    torch.save(trainset.images.cpu(), os.path.join(save_dir, "distilled_images.pt"))
+    torch.save(trainset_images.cpu(), os.path.join(save_dir, "distilled_images.pt"))
     torch.save(labels.cpu(), os.path.join(save_dir, "labels.pt"))
     print("Dataset saved.")
+
+    wandb.finish(quiet=True)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='mtt contrastive learning data distillation process')
-
     parser.add_argument('--dataset', type=str, default=str(SupportedDatasets.CIFAR100.value), help='dataset')
-
     parser.add_argument('--model', type=str, default='ConvNet', help='model')
-
     parser.add_argument('--ipc', type=int, default=1, help='image(s) per class')
-
     parser.add_argument('--epoch_eval_train', type=int, default=5, help='epochs to train a model with synthetic data')
     parser.add_argument('--distillation_step', type=int, default=2, help='how many distillation steps to perform')
     parser.add_argument('--lr_img', type=float, default=0.01, help='learning rate for updating synthetic images')
     parser.add_argument('--lr', type=float, default=1e-05, help='learning rate for updating simclr learning rate')
     parser.add_argument('--lr_teacher', type=float, default=0.01, help='initialization for synthetic learning rate')
-    parser.add_argument("--batch-size", type=int, default=10, help='Training batch size for inner loop')
-        
-    parser.add_argument('--buffer_path', type=str, default='./buffers', help='buffer path')
-    parser.add_argument('--canvas_size', type=int, default=2, help='size of synthetic canvas')
+    parser.add_argument("--batch-size", type=int, default=1024, help='Training batch size for inner loop')
 
     parser.add_argument('--expert_epochs', type=int, default=3, help='how many expert epochs the target params are')
     parser.add_argument('--syn_steps', type=int, default=1, help='how many steps to take on synthetic data')
