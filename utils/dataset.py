@@ -37,6 +37,31 @@ class CIFAR10Augment(torchvision.datasets.CIFAR10):
             imgs.append(self.transform(pil_img))
         return imgs
 
+class MNISTAugment(torchvision.datasets.MNIST):
+    def __init__(self, root: str, transform=Callable, n_augmentations: int = 2, train: bool = True, download: bool = False):
+        super().__init__(
+            root=root,
+            train=train,
+            transform=transform,
+            download=download
+        )
+        self.n_augmentations = n_augmentations
+
+    def __getitem__(self, index):
+        """
+        Args:
+            index (int): Index
+
+        Returns:
+            tuple: (image, target) where target is index of the target class.
+        """
+        img, _ = self.data[index], self.targets[index]
+        img = img.reshape(1, 28, 28).float() / 255
+        imgs = []
+        for _ in range(self.n_augmentations):
+            imgs.append(self.transform(img))
+        return imgs
+
 class STL10Augment(torchvision.datasets.STL10):
     def __init__(
             self,

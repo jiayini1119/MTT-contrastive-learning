@@ -19,8 +19,8 @@ from tqdm import tqdm
 import wandb
 # from sas.configs import SupportedDatasets, get_datasets
 from utils.data_util import *
-from sas_cl.evaluate.lbfgs import test_clf
-from sas_cl.util import Random
+from evaluate.lbfgs import test_clf
+from utils.random import Random
 from models.networks.convNet import *
 
 
@@ -51,7 +51,6 @@ def main(rank: int, world_size: int, args: int):
     datasets = get_datasets(args.dataset)
 
     testloader = torch.utils.data.DataLoader(
-        # dataset=CustomSubsetDataset(datasets.testset, subset_indices=range(1000)), 
         dataset=datasets.testset,
         batch_size=args.batch_size, 
         shuffle=False,
@@ -75,7 +74,7 @@ def main(rank: int, world_size: int, args: int):
 
     # linear probe on a randomly initialized model
     net_width, net_depth, net_act, net_norm, net_pooling = 128, 3, 'relu', 'instancenorm', 'avgpooling'
-    net = ConvNet(net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling)
+    net = ConvNet(net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling, channel=datasets.channel)
 
     net.to(device)
 
@@ -163,15 +162,15 @@ def ddp_setup(rank: int, world_size: int, port: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='PyTorch Linear Probe')
     parser = argparse.ArgumentParser(description='Train downstream classifier with gradients.')
-    parser.add_argument('--lr', default=0.01, type=float, help='learning rate')
+    parser.add_argument('--lr', default=0.0001, type=float, help='learning rate')
     parser.add_argument("--momentum", default=0.9, type=float, help='SGD momentum')
-    parser.add_argument("--batch-size", type=int, default=512, help='Training batch size')
-    parser.add_argument("--num-epochs", type=int, default=50, help='Number of training epochs')
+    parser.add_argument("--batch-size", type=int, default=1024, help='Training batch size')
+    parser.add_argument("--num-epochs", type=int, default=100, help='Number of training epochs')
     parser.add_argument("--weight-decay", type=float, default=1e-6, help='Weight decay on the linear classifier')
     parser.add_argument("--nesterov", action="store_true", help="Turn on Nesterov style momentum")
     parser.add_argument("--encoder", type=str, default='ckpt.pth', help='Pretrained encoder')
     parser.add_argument('--temperature', type=float, default=0.5, help='InfoNCE temperature')
-    parser.add_argument('--dataset', type=str, default=str(SupportedDatasets.CIFAR100.value), help='dataset',
+    parser.add_argument('--dataset', type=str, default=str(SupportedDatasets.CIFAR10.value), help='dataset',
                         choices=[x.value for x in SupportedDatasets])
     parser.add_argument('--device', type=int, default=-1, help="GPU number to use")
     parser.add_argument("--device-ids", nargs = "+", default = None, help = "Specify device ids if using multiple gpus")

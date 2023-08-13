@@ -11,6 +11,7 @@ import kornia
 class SupportedDatasets(Enum):
     CIFAR10 = "cifar10"
     CIFAR100 = "cifar100"
+    MNIST = "mnist"
     TINY_IMAGENET = "tiny_imagenet"
     IMAGENET = "imagenet"
     STL10 = "stl10"
@@ -18,11 +19,11 @@ class SupportedDatasets(Enum):
 CACHED_MEAN_STD = {
     SupportedDatasets.CIFAR10.value: ((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
     SupportedDatasets.CIFAR100.value: ((0.5071, 0.4865, 0.4409), (0.2009, 0.1984, 0.2023)),
+    SupportedDatasets.MNIST.value:((0.1307,), (0.3081,)),
     SupportedDatasets.STL10.value: ((0.4409, 0.4279, 0.3868), (0.2309, 0.2262, 0.2237)),
     SupportedDatasets.TINY_IMAGENET.value: ((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     SupportedDatasets.IMAGENET.value: ((0.485, 0.456, 0.3868), (0.2309, 0.2262, 0.2237))
 }
-
 
 def ColourDistortion(s=1.0):
     # s is the strength of color distortion.
@@ -39,14 +40,20 @@ def BlurOrSharpen(radius=2.):
     return full_transform
 
 def KorniaAugmentation(dataset):
-
-    return kornia.augmentation.AugmentationSequential(
-        kornia.augmentation.RandomResizedCrop((32, 32), scale=(0.08, 1.0), same_on_batch=True, keepdim=True),
-        kornia.augmentation.RandomHorizontalFlip(same_on_batch=True, keepdim=True),
-        kornia.augmentation.ColorJiggle(0.4, 0.4, 0.4, 0.1, same_on_batch=True, p=0.8, keepdim=True),
-        kornia.augmentation.RandomGrayscale(same_on_batch=True, p=0.2, keepdim=True),
-        kornia.augmentation.Normalize(*CACHED_MEAN_STD[dataset],keepdim=True),
-    )
+    if dataset == SupportedDatasets.MNIST.value:
+        return kornia.augmentation.AugmentationSequential(
+            kornia.augmentation.RandomResizedCrop((28, 28), scale=(0.08, 1.0), same_on_batch=True, keepdim=True),
+            kornia.augmentation.RandomHorizontalFlip(same_on_batch=True, keepdim=True),
+            kornia.augmentation.Normalize(*CACHED_MEAN_STD[dataset],keepdim=True),
+        )
+    else:
+        return kornia.augmentation.AugmentationSequential(
+            kornia.augmentation.RandomResizedCrop((32, 32), scale=(0.08, 1.0), same_on_batch=True, keepdim=True),
+            kornia.augmentation.RandomHorizontalFlip(same_on_batch=True, keepdim=True),
+            kornia.augmentation.ColorJiggle(0.4, 0.4, 0.4, 0.1, same_on_batch=True, p=0.8, keepdim=True),
+            kornia.augmentation.RandomGrayscale(same_on_batch=True, p=0.2, keepdim=True),
+            kornia.augmentation.Normalize(*CACHED_MEAN_STD[dataset],keepdim=True),
+        )
 
 
 class ImageFilterTransform(object):

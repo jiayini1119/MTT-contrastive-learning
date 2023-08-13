@@ -100,7 +100,7 @@ def main(args):
 
         # Initialize student network with expert params from the expert trajectory
         net_width, net_depth, net_act, net_norm, net_pooling = 128, 3, 'relu', 'instancenorm', 'avgpooling'
-        net = ConvNet(net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling)
+        net = ConvNet(net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling, channel=datasets.channel)
 
         expert_state_dict = torch.load(initial_trajectory)
         net.load_state_dict(expert_state_dict)
