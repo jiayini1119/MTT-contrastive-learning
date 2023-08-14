@@ -162,10 +162,10 @@ def ddp_setup(rank: int, world_size: int, port: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='PyTorch Linear Probe')
     parser = argparse.ArgumentParser(description='Train downstream classifier with gradients.')
-    parser.add_argument('--lr', default=0.0001, type=float, help='learning rate')
+    parser.add_argument('--lr', default=0.001, type=float, help='learning rate')
     parser.add_argument("--momentum", default=0.9, type=float, help='SGD momentum')
     parser.add_argument("--batch-size", type=int, default=1024, help='Training batch size')
-    parser.add_argument("--num-epochs", type=int, default=100, help='Number of training epochs')
+    parser.add_argument("--num-epochs", type=int, default=400, help='Number of training epochs')
     parser.add_argument("--weight-decay", type=float, default=1e-6, help='Weight decay on the linear classifier')
     parser.add_argument("--nesterov", action="store_true", help="Turn on Nesterov style momentum")
     parser.add_argument("--encoder", type=str, default='ckpt.pth', help='Pretrained encoder')

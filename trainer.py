@@ -165,20 +165,23 @@ class SynTrainer(Trainer):
         num_batches = (total_samples + self.batch_size - 1) // self.batch_size
         t = tqdm(range(num_batches), desc='Loss: **** ', bar_format='{desc}{bar}{r_bar}')
 
-        indices = torch.randperm(total_samples)
+        indices = torch.randperm(total_samples) # shuffle
 
         for batch_idx in t:
             start_idx = batch_idx * self.batch_size
             end_idx = min((batch_idx + 1) * self.batch_size, total_samples)
-
             these_indices = indices[start_idx:end_idx]
+            batch_images = self.trainset_images[these_indices].to(self.device)
 
-            train_x = self.trainset_images[these_indices].to(self.device)
+            batch_size_ind = len(batch_images)
+            img_shape = batch_images[0].shape
 
-            inputs = []
+            inputs = [torch.empty((batch_size_ind,) + img_shape, device=self.device) for _ in range(self.n_augmentations)]
 
-            for _ in range(self.n_augmentations):
-                inputs.append(self.transform(train_x))
+            for img_idx, image in enumerate(batch_images):
+                for aug_idx in range(self.n_augmentations):
+                    augmented_image = self.transform(image)
+                    inputs[aug_idx][img_idx] = augmented_image
 
             num_positive = len(inputs)
             x = torch.cat(inputs, dim=0).to(self.device)

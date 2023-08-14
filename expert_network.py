@@ -92,7 +92,7 @@ def main(rank: int, world_size: int, args):
         trainloader = torch.utils.data.DataLoader(
             dataset=trainset,
             batch_size=args.batch_size,
-            shuffle=False,
+            shuffle=True,
             sampler=DistributedSampler(trainset, shuffle=True, num_replicas=world_size, rank=rank, drop_last=True) if args.distributed else None,
             num_workers=4,
             pin_memory=True,
