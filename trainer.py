@@ -25,6 +25,7 @@ class Trainer():
         rank: int = 0,
         world_size: int = 1,
         lr_scheduler = None,
+        reg_weight = 0.00001
     ):
         """
         :param device: Device to run on (GPU)
@@ -47,6 +48,7 @@ class Trainer():
         self.lr_scheduler = lr_scheduler
         self.distributed = distributed
         self.world_size = world_size
+        self.reg_weight = reg_weight
 
         self.criterion = nn.CrossEntropyLoss()
         self.best_acc = 0
@@ -122,7 +124,7 @@ class Trainer():
     def test(self):
         X, y = encode_train_set(self.clftrainloader, self.device, self.net)
         representation_dim = self.net.module.representation_dim if self.distributed else self.net.representation_dim
-        clf = train_clf(X, y, representation_dim, self.num_classes, self.device, reg_weight=1e-5, iter=100)
+        clf = train_clf(X, y, representation_dim, self.num_classes, self.device, reg_weight=self.reg_weight, iter=100)
         acc = test_clf(self.testloader, self.device, self.net, clf)
 
         if acc > self.best_acc:
@@ -182,7 +184,7 @@ class SynTrainer(Trainer):
                 for aug_idx in range(self.n_augmentations):
                     augmented_image = self.transform(image)
                     inputs[aug_idx][img_idx] = augmented_image
-
+        
             num_positive = len(inputs)
             x = torch.cat(inputs, dim=0).to(self.device)
             self.encoder_optimizer.zero_grad()

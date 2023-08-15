@@ -4,6 +4,9 @@
 *.pyc
 *.png
 wandb
+*.txt
 
 data/
 distilled/
+ckpt_cifar10/
+ckpt_cifar100/

@@ -29,7 +29,7 @@ def main(rank: int, world_size: int, args):
     
     for expert_index in range(args.num_expert):
 
-        expert_dir = os.path.join('ckpt', f'trajectory_{expert_index}')
+        expert_dir = os.path.join(f'ckpt_{args.dataset}', f'trajectory_{expert_index}')
         os.makedirs(expert_dir, exist_ok=True)
         
         test_accuracies = []
@@ -67,8 +67,6 @@ def main(rank: int, world_size: int, args):
         ##############################################################
         # Encoder
         ##############################################################
-
-        print("channel", datasets.channel)
 
         net_width, net_depth, net_act, net_norm, net_pooling = 128, 3, 'relu', 'instancenorm', 'avgpooling'
         net = ConvNet(net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling, channel=datasets.channel)
@@ -141,6 +139,7 @@ def main(rank: int, world_size: int, args):
             testloader=testloader,
             num_classes=datasets.num_classes,
             optimizer=optimizer,
+            reg_weight=args.reg_weight,
         )
 
         acc_epoch = 0
@@ -191,13 +190,13 @@ def main(rank: int, world_size: int, args):
         if args.distributed:
             destroy_process_group()
 
-        plt.plot(range(1, acc_epoch + 1), test_accuracies, label=f'Expert {expert_index}')
-        plt.xlabel('Epoch')
-        plt.ylabel('Test Accuracy')
-        plt.legend()
-        plot_name = f'{expert_index}_{DT_STRING}_{args.dataset}_plot.png'
-        plt.savefig(plot_name)
-        print(f'Saved plot as {plot_name}')
+        # plt.plot(range(1, acc_epoch + 1), test_accuracies, label=f'Expert {expert_index}')
+        # plt.xlabel('Epoch')
+        # plt.ylabel('Test Accuracy')
+        # plt.legend()
+        # plot_name = f'{expert_index}_{DT_STRING}_{args.dataset}_plot.png'
+        # plt.savefig(plot_name)
+        # print(f'Saved plot as {plot_name}')
 
 ##############################################################
 # Distributed Training Setup
@@ -222,6 +221,7 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=random.randint(49152, 65535), help="free port to use")
     parser.add_argument('--seed', type=int, default=0, help="Seed for randomness")
     parser.add_argument('--num_expert', type=int, default=1, help="number of expert trajectories")
+    parser.add_argument('--reg_weight', type=float, default=0.00001, help="regularization weight")
 
     # Parse arguments
     args = parser.parse_args()

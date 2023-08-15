@@ -4,34 +4,38 @@ Data Distillation by Matching Training Trajectories for Contrastive Learning
 import argparse
 import glob
 import wandb
+from datetime import datetime
+
 
 from utils.data_util import *
 import numpy as np
 from models.networks.convNet import *
 from utils.augmentation import KorniaAugmentation
 import torch.optim as optim
+from utils.random import Random
+
 
 from models.projection_heads.critic import LinearCritic
 from trainer import SynTrainer
 
 def main(args):
     """
-    I have a ckpt folder with structure:
-    trajectory 0:
+    I have ckpt folder with structure:
+    trajectory_0:
       - trajectory_0_epoch_0
       - trajectory_0_epoch_1
       - trajectory_0_epoch_2
 
     
-    trajectory 1:
+    trajectory_1:
       - trajectory_1_epoch_0
       - trajectory_1_epoch_1
       - trajectory_1_epoch_2
     
-    trajectory 2:
+    trajectory_2:
       - trajectory_2_epoch_0
       - trajectory_2_epoch_1
-      - trajectory__epoch_2
+      - trajectory_2_epoch_2
 
     
     Those are saved duirng training the expert trajectory
@@ -69,6 +73,9 @@ def main(args):
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
+    Random(args.seed)
+
+    DT_STRING = "".join(str(datetime.now()).split())
 
     # Initialize Syn dataset D_syn
     ori_datasets = get_datasets(args.dataset)
@@ -82,6 +89,8 @@ def main(args):
 
     trainset_images = trainset_images.to(device).detach().requires_grad_(True)
 
+    print(trainset_images)
+
     optimizer_img = torch.optim.SGD([nn.Parameter(trainset_images)], lr=args.lr_img, momentum=0.5)
 
     optimizer_img.zero_grad()
@@ -89,11 +98,11 @@ def main(args):
     for _ in range(args.distillation_step + 1):
 
         # sample an expert trajectory
-        subdirectories = [d for d in os.listdir('ckpt') if os.path.isdir(os.path.join('ckpt', d))]
+        subdirectories = [d for d in os.listdir(f'ckpt_{args.dataset}') if os.path.isdir(os.path.join(f'ckpt_{args.dataset}', d))]
 
         selected_directory = np.random.choice(subdirectories)
 
-        trajectories = os.path.join('ckpt', selected_directory)
+        trajectories = os.path.join(f'ckpt_{args.dataset}', selected_directory)
         matching_files = glob.glob(os.path.join(trajectories, f"{selected_directory}_epoch_*.pt"))
 
         initial_trajectory = np.random.choice([f for f in matching_files if int(f.split('_epoch_')[-1].split('.pt')[0]) < args.max_start_epoch])
@@ -154,6 +163,7 @@ def main(args):
             testloader=testloader,
             num_classes=ori_datasets.num_classes,
             optimizer=optimizer_simclr,
+            reg_weight=args.reg_weight,
         )
 
         for epoch in range(0, args.syn_steps):
@@ -220,39 +230,41 @@ def main(args):
         optimizer_img.step()
 
         print("dataset grad final")
-        print(trainset_images.requires_grad)
-        print(trainset_images.grad)
+        print(trainset_images)
+        # print(trainset_images.requires_grad)
+        # print(trainset_images.grad)
 
         for _ in student_params:
             del _
     
     # save the final dataset
-    save_dir = "distilled"
+    save_dir = f"distilled_data_{args.dataset}_{DT_STRING}"
     os.makedirs(save_dir, exist_ok=True) 
     torch.save(trainset_images.cpu(), os.path.join(save_dir, "distilled_images.pt"))
     torch.save(labels.cpu(), os.path.join(save_dir, "labels.pt"))
-    print("Dataset saved.")
+    print("Distilled dataset saved.")
 
     wandb.finish(quiet=True)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='mtt contrastive learning data distillation process')
-    parser.add_argument('--dataset', type=str, default=str(SupportedDatasets.CIFAR100.value), help='dataset')
+    parser.add_argument('--dataset', type=str, default=str(SupportedDatasets.CIFAR10.value), help='dataset')
     parser.add_argument('--model', type=str, default='ConvNet', help='model')
     parser.add_argument('--ipc', type=int, default=1, help='image(s) per class')
     parser.add_argument('--epoch_eval_train', type=int, default=5, help='epochs to train a model with synthetic data')
-    parser.add_argument('--distillation_step', type=int, default=2, help='how many distillation steps to perform')
-    parser.add_argument('--lr_img', type=float, default=0.01, help='learning rate for updating synthetic images')
-    parser.add_argument('--lr', type=float, default=1e-05, help='learning rate for updating simclr learning rate')
-    parser.add_argument('--lr_teacher', type=float, default=0.01, help='initialization for synthetic learning rate')
-    parser.add_argument("--batch-size", type=int, default=1024, help='Training batch size for inner loop')
+    parser.add_argument('--distillation_step', type=int, default=50, help='how many distillation steps to perform')
+    parser.add_argument('--lr_img', type=float, default=0.01, help='learning rate for updating synthetic data')
+    parser.add_argument('--lr', type=float, default=1e-05, help='simclr learning rate')
+    parser.add_argument('--lr_teacher', type=float, default=0.01, help='initialization for synthetic data learning rate')
+    parser.add_argument("--batch-size", type=int, default=10, help='Training batch size for inner loop')
 
-    parser.add_argument('--expert_epochs', type=int, default=3, help='how many expert epochs the target params are')
-    parser.add_argument('--syn_steps', type=int, default=1, help='how many steps to take on synthetic data')
+    parser.add_argument('--expert_epochs', type=int, default=10, help='how many expert epochs the target params are')
+    parser.add_argument('--syn_steps', type=int, default=10, help='how many steps to take on synthetic data')
     parser.add_argument('--max_start_epoch', type=int, default=25, help='max epoch we can start at')
     parser.add_argument('--seed', type=int, default=0, help="Seed for randomness")
     parser.add_argument('--temperature', type=float, default=0.5, help='InfoNCE temperature')
+    parser.add_argument('--reg_weight', type=float, default=0.001, help="regularization weight")
 
     args = parser.parse_args()
 

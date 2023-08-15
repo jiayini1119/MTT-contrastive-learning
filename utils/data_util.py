@@ -12,7 +12,7 @@ from collections import namedtuple
 from utils.augmentation import ColourDistortion
 from utils.dataset import *
 
-import kornia
+from utils.augmentation import KorniaAugmentation
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
@@ -201,14 +201,8 @@ class CustomDatasetAugment(Dataset):
            imgs.append(self.transform(img))
         return imgs
 
-def get_custom_dataset(dataset_images, labels, device, num_positive=2):
-    kornia_augmentations = kornia.augmentation.AugmentationSequential(
-        kornia.augmentation.RandomResizedCrop((32, 32), scale=(0.08, 1.0), same_on_batch=True, keepdim=True),
-        kornia.augmentation.RandomHorizontalFlip(same_on_batch=True, keepdim=True),
-        kornia.augmentation.ColorJiggle(0.4, 0.4, 0.4, 0.1, same_on_batch=True, p=0.8, keepdim=True),
-        kornia.augmentation.RandomGrayscale(same_on_batch=True, p=0.2, keepdim=True),
-    )
-
-    trainset = CustomDatasetAugment(images=dataset_images, labels=labels, device=device, transform=kornia_augmentations, n_augmentations=num_positive)
+def get_custom_dataset(dataset_images, labels, device, dataset, num_positive=2):
+    kornia_augmentation = KorniaAugmentation(dataset).to(device)
+    trainset = CustomDatasetAugment(images=dataset_images, labels=labels, device=device, transform=kornia_augmentation, n_augmentations=num_positive)
 
     return trainset
