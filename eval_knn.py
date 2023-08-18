@@ -1,46 +1,55 @@
-"""
-Evaluate distilled dataset
-"""
 import argparse
 import wandb
 import torch
-
+import numpy as np
+import torch.optim as optim
+from sklearn.neighbors import KNeighborsClassifier
 from utils.data_util import *
 from models.networks.convNet import *
-import torch.optim as optim
-from utils.random import Random
-
-
-from models.projection_heads.critic import LinearCritic
 from trainer import Trainer
+from utils.random import Random
+from models.projection_heads.critic import LinearCritic
+
+def extract_embeddings(loader, model, device):
+    embeddings = []
+    labels = []
+    
+    with torch.no_grad():
+        for data, target in loader:
+            data = data.to(device)
+            output = model(data)
+            embeddings.append(output.cpu())
+            labels.append(target.cpu())
+
+    embeddings = torch.cat(embeddings)
+    labels = torch.cat(labels)
+    return embeddings, labels
+
+def evaluate_knn(clftrain_embeddings, clftrain_labels, test_embeddings, test_labels):
+    clftrain_embeddings = clftrain_embeddings / torch.norm(clftrain_embeddings, dim=1, keepdim=True)
+    test_embeddings = test_embeddings / torch.norm(test_embeddings, dim=1, keepdim=True)
+
+    knn = KNeighborsClassifier(n_neighbors=5, weights="distance", n_jobs=-1)
+    knn.fit(clftrain_embeddings, clftrain_labels)
+    accuracy = knn.score(test_embeddings, test_labels)
+    print(f"KNN Accuracy: {accuracy*100:.2f}%")
+    return accuracy
 
 def main(args):
-
-    try:
-        distilled_images = torch.load(args.dip)
-    
-    except FileNotFoundError as e:
-        print(f"Error: {e}")
-        raise
-
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-    wandb.init(
-        project="distilled-image-evaluation",
-        config=args
-    )
-
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     Random(args.seed)
+
+    wandb.init(project="distilled-image-knn-evaluation", config=args)
 
     ori_datasets = get_datasets(args.dataset)
 
     testset = ori_datasets.testset
 
-    clftrainset = ori_datasets.clftrainset
+    clfset = ori_datasets.clftrainset
 
-    distilled_images = distilled_images.detach().cpu()
+    distilled_images = torch.load(args.dip).detach().cpu()
 
     trainset = get_custom_dataset(dataset_images=distilled_images, device=device, dataset=args.dataset)
 
@@ -63,7 +72,7 @@ def main(args):
         )
 
     clftrainloader = torch.utils.data.DataLoader(
-            dataset=clftrainset,
+            dataset=clfset,
             batch_size=args.test_batch_size, 
             shuffle=False, 
             num_workers=6, 
@@ -78,6 +87,11 @@ def main(args):
             pin_memory=True,
         )
 
+    clftrain_embeddings, clftrain_labels = extract_embeddings(clftrainloader, net, device)
+    test_embeddings, test_labels = extract_embeddings(testloader, net, device)
+    initial_knn_accuracy = evaluate_knn(clftrain_embeddings, clftrain_labels, test_embeddings, test_labels)
+    print("Initial KNN Accuracy: ", initial_knn_accuracy)
+
     trainer = Trainer(
         device=device,
         distributed=False,
@@ -91,10 +105,6 @@ def main(args):
         reg_weight=args.reg_weight,
     )
 
-    test_acc = trainer.test()
-    print("linear probe over randomly initialized network test accuracy: ", test_acc)
-
-    test_accuracies = []
 
     for epoch in range(0, args.num_epochs):
         print(f"step: {epoch}")
@@ -107,37 +117,26 @@ def main(args):
             step=epoch
         )
 
-    test_acc = trainer.test()
-    test_accuracies.append(test_acc)
-    print(f"test_acc: {test_acc}")
-    wandb.log(
-        data={"test": {
-        "acc": test_acc,
-        }},
-        step=epoch
-    )
-
-    print("best test accuracy: ", max(test_accuracies))
+    clftrain_embeddings, train_labels = extract_embeddings(clftrainloader, net, device)
+    test_embeddings, test_labels = extract_embeddings(testloader, net, device)
+    updated_knn_accuracy = evaluate_knn(clftrain_embeddings, train_labels, test_embeddings, test_labels)
+    print("KNN Accuracy after SimCLR training: ", updated_knn_accuracy)
 
     wandb.finish(quiet=True)
 
-
-
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='evaluate distilled dataset')
+    parser = argparse.ArgumentParser(description='evaluate distilled dataset using KNN on embeddings')
     parser.add_argument('--dataset', type=str, default=str(SupportedDatasets.CIFAR10.value), help='dataset',
                         choices=[x.value for x in SupportedDatasets])    
     parser.add_argument('--dip', type=str, default='distill', help='distilled image path')
     parser.add_argument('--model', type=str, default='ConvNet', help='model')
     parser.add_argument('--lr', type=float, default=1e-04, help='learning rate')
-    parser.add_argument("--batch-size", type=int, default=50, help='Training batch size')
-    parser.add_argument("--test-batch-size", type=int, default=1024, help='Testing and classification set batch size')
+    parser.add_argument('--batch-size', type=int, default=50, help='batch size')
     parser.add_argument('--seed', type=int, default=3407, help="Seed for randomness")
     parser.add_argument('--temperature', type=float, default=0.5, help='InfoNCE temperature')
+    parser.add_argument("--test-batch-size", type=int, default=1024, help='Testing and classification set batch size')
     parser.add_argument('--reg_weight', type=float, default=0.001, help="regularization weight")
     parser.add_argument('--num_epochs', type=int, default=200, help="number of epochs to train")
 
-
     args = parser.parse_args()
-
     main(args)
