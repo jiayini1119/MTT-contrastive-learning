@@ -18,7 +18,6 @@ def main(args):
 
     try:
         distilled_images = torch.load(args.dip)
-        labels = torch.load(args.label_path)
     
     except FileNotFoundError as e:
         print(f"Error: {e}")
@@ -41,18 +40,23 @@ def main(args):
 
     clfset = ori_datasets.clftrainset
 
-    trainset = get_custom_dataset(dataset_images=distilled_images, labels=labels, device=device, dataset=dataset)
+    distilled_images = distilled_images.detach().cpu()
+
+    trainset = get_custom_dataset(dataset_images=distilled_images, device=device, dataset=args.dataset)
 
     net_width, net_depth, net_act, net_norm, net_pooling = 128, 3, 'relu', 'instancenorm', 'avgpooling'
     net = ConvNet(net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling)
 
     critic = LinearCritic(net.representation_dim, temperature=args.temperature).to(device)
 
-    optimizer = optim.Adam(list(net.parameters()) + list(critic.parameters()), lr=1e-3, weight_decay=1e-6)
+    optimizer = optim.Adam(list(net.parameters()) + list(critic.parameters()), lr=args.lr, weight_decay=1e-6)
+
+    net.to(device)
+    critic.to(device)
 
     trainloader = torch.utils.data.DataLoader(
             dataset=trainset,
-            batch_size=args.batch_size,
+            batch_size=args.test_batch_size,
             shuffle=True,
             num_workers=5,
             pin_memory=True,
@@ -60,7 +64,7 @@ def main(args):
 
     clftrainloader = torch.utils.data.DataLoader(
             dataset=clfset,
-            batch_size=args.batch_size, 
+            batch_size=args.test_batch_size, 
             shuffle=False, 
             num_workers=6, 
             pin_memory=True
@@ -76,6 +80,7 @@ def main(args):
 
     trainer = Trainer(
         device=device,
+        distributed=False,
         net=net,
         critic=critic,
         trainloader=trainloader,
@@ -83,6 +88,7 @@ def main(args):
         testloader=testloader,
         num_classes=ori_datasets.num_classes,
         optimizer=optimizer,
+        reg_weight=args.reg_weight,
     )
 
     test_acc = trainer.test()
@@ -101,15 +107,15 @@ def main(args):
             step=epoch
         )
 
-        test_acc = trainer.test()
-        test_accuracies.append(test_acc)
-        print(f"test_acc: {test_acc}")
-        wandb.log(
-            data={"test": {
-            "acc": test_acc,
-            }},
-            step=epoch
-        )
+    test_acc = trainer.test()
+    test_accuracies.append(test_acc)
+    print(f"test_acc: {test_acc}")
+    wandb.log(
+        data={"test": {
+        "acc": test_acc,
+        }},
+        step=epoch
+    )
 
     print("best test accuracy: ", max(test_accuracies))
 
@@ -122,13 +128,14 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default=str(SupportedDatasets.CIFAR10.value), help='dataset',
                         choices=[x.value for x in SupportedDatasets])    
     parser.add_argument('--dip', type=str, default='distill', help='distilled image path')
-    parser.add_argument('--label_path', type=str, default='distill', help='path for the label')
     parser.add_argument('--model', type=str, default='ConvNet', help='model')
-    parser.add_argument('--lr', type=float, default=1e-05, help='learning rate')
-    parser.add_argument("--batch-size", type=int, default=10, help='Training batch size')
-    parser.add_argument('--seed', type=int, default=0, help="Seed for randomness")
+    parser.add_argument('--lr', type=float, default=1e-04, help='learning rate')
+    parser.add_argument("--batch-size", type=int, default=50, help='Training batch size')
+    parser.add_argument("--test-batch-size", type=int, default=1024, help='Testing and classification set batch size')
+    parser.add_argument('--seed', type=int, default=3407, help="Seed for randomness")
     parser.add_argument('--temperature', type=float, default=0.5, help='InfoNCE temperature')
     parser.add_argument('--reg_weight', type=float, default=0.001, help="regularization weight")
+    parser.add_argument('--num_epochs', type=int, default=200, help="number of epochs to train")
 
 
     args = parser.parse_args()

@@ -4,9 +4,12 @@ Adapted from https://github.com/sjoshi804/sas-data-efficient-contrastive-learnin
 
 from enum import Enum
 import json
-
+import numpy as np
+import torch
 import torchvision
 import torchvision.transforms as transforms
+
+import torch.nn as nn
 
 from collections import namedtuple
 from utils.augmentation import ColourDistortion
@@ -26,9 +29,9 @@ class SupportedDatasets(Enum):
     IMAGENET = "imagenet"
     STL10 = "stl10"
 
-Datasets = namedtuple('Datasets', 'trainset testset clftrainset num_classes img_size channel')
+Datasets = namedtuple('Datasets', 'trainset testset clftrainset num_classes img_size channel trainset_ori')
 
-def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=False, num_positive=2):
+def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=False, num_positive=2, need_train_ori=False):
 
     CACHED_MEAN_STD = {
         SupportedDatasets.CIFAR10.value: ((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
@@ -132,6 +135,10 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
             trainset = CIFAR100Augment(root=root, train=True, download=True, transform=transform_train, n_augmentations=num_positive)
         clftrainset = dset(root=root, train=True, download=True, transform=transform_clftrain)
         testset = dset(root=root, train=False, download=True, transform=transform_test)
+        if need_train_ori:
+            trainset_ori=dset(root=root, train=True, download=True, transform=transforms.ToTensor())
+        else:
+            trainset_ori=None
         num_classes = 100
 
     elif dataset == SupportedDatasets.CIFAR10.value:
@@ -142,6 +149,10 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
             trainset = CIFAR10Augment(root=root, train=True, download=True, transform=transform_train, n_augmentations=num_positive)
         clftrainset = dset(root=root, train=True, download=True, transform=transform_clftrain)
         testset = dset(root=root, train=False, download=True, transform=transform_test)
+        if need_train_ori:
+            trainset_ori=dset(root=root, train=True, download=True, transform=transforms.ToTensor())
+        else:
+            trainset_ori=None
         num_classes = 10
 
     elif dataset == SupportedDatasets.MNIST.value:
@@ -152,6 +163,10 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
             trainset = MNISTAugment(root=root, train=True, download=True, transform=transform_train, n_augmentations=num_positive)
         clftrainset = dset(root=root, train=True, download=True, transform=transform_clftrain)
         testset = dset(root=root, train=False, download=True, transform=transform_test)
+        if need_train_ori:
+            trainset_ori=dset(root=root, train=True, download=True, transform=transforms.ToTensor())
+        else:
+            trainset_ori=None
         num_classes = 10
 
     elif dataset == SupportedDatasets.STL10.value:
@@ -162,6 +177,10 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
             trainset = STL10Augment(root=root, split='train+unlabeled', download=True, transform=transform_train)
         clftrainset = dset(root=root, split='train', download=True, transform=transform_clftrain)
         testset = dset(root=root, split='test', download=True, transform=transform_test)
+        if need_train_ori:
+            trainset_ori=dset(root=root, split='train+unlabeled', download=True, transform=transforms.ToTensor())
+        else:
+            trainset_ori=None
         num_classes = 10
 
     elif dataset == SupportedDatasets.TINY_IMAGENET.value:
@@ -169,7 +188,11 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
             raise NotImplementedError("Not implemented for TinyImageNet")
         trainset = ImageFolderAugment(root=f"{root}train/", transform=transform_train, num_positive=num_positive)  
         clftrainset = ImageFolder(root=f"{root}train/", transform=transform_clftrain)      
-        testset = ImageFolder(root=f"{root}test/", transform=transform_train)    
+        testset = ImageFolder(root=f"{root}test/", transform=transform_train)   
+        if need_train_ori:
+            trainset_ori=ImageFolder(root=f"{root}train/", transform=transforms.ToTensor())  
+        else:
+            trainset_ori=None 
         num_classes = 200
     
     elif dataset == SupportedDatasets.IMAGENET.value:
@@ -178,14 +201,17 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
         trainset = ImageNetAugment(root=f"{root}train_full/", transform=transform_train, n_augmentations=num_positive)
         clftrainset = ImageNet(root=f"{root}train_full/", transform=transform_clftrain)      
         testset = ImageNet(root=f"{root}test/", transform=transform_clftrain)     
+        if need_train_ori:
+            trainset_ori=ImageNet(root=f"{root}train_full/", transform=transforms.ToTensor())
+        else:
+            trainset_ori=None
         num_classes = 1000
 
-    return Datasets(trainset=trainset, testset=testset, clftrainset=clftrainset, num_classes=num_classes, img_size=img_size, channel=channel)
+    return Datasets(trainset=trainset, testset=testset, clftrainset=clftrainset, num_classes=num_classes, img_size=img_size, channel=channel, trainset_ori=trainset_ori)
     
 class CustomDatasetAugment(Dataset):
-    def __init__(self, images, labels, device, transform, n_augmentations: 2):
-        self.images = images.to(device)
-        self.labels = labels.to(device)
+    def __init__(self, images, device, transform, n_augmentations: 2):
+        self.images = images
         self.device = device
         self.transform = transform
         self.n_augmentations = n_augmentations
@@ -194,15 +220,42 @@ class CustomDatasetAugment(Dataset):
         return len(self.images)
     
     def __getitem__(self, idx):
-        img, _ = self.images[idx], self.labels[idx]
-        img.to(self.device)
+        img = self.images[idx]
         imgs = []
         for _ in range(self.n_augmentations):
            imgs.append(self.transform(img))
         return imgs
 
-def get_custom_dataset(dataset_images, labels, device, dataset, num_positive=2):
+def get_custom_dataset(dataset_images, device, dataset, num_positive=2):
     kornia_augmentation = KorniaAugmentation(dataset).to(device)
-    trainset = CustomDatasetAugment(images=dataset_images, labels=labels, device=device, transform=kornia_augmentation, n_augmentations=num_positive)
+    trainset = CustomDatasetAugment(images=dataset_images, device=device, transform=kornia_augmentation, n_augmentations=num_positive)
 
     return trainset
+
+def get_init_syn_data(method: str, dataset: str, ipc: int, path: str):
+    if method == "random":
+        ori_datasets = get_datasets(dataset)
+        return torch.randn(ori_datasets.num_classes * ipc, ori_datasets.channel, ori_datasets.img_size, ori_datasets.img_size)
+    elif method == "real":
+        ori_datasets = get_datasets(dataset, need_train_ori=True)
+        train_set_ori = ori_datasets.trainset_ori
+        all_labels = [label for (_, label) in train_set_ori]
+        unique_labels = list(set(all_labels))
+
+        sampled_data = []
+        for c in unique_labels:
+            class_indices = [i for i, (_, label) in enumerate(train_set_ori) if label == c]
+            if len(class_indices) >= ipc:
+                sampled_indices = np.random.choice(class_indices, ipc, replace=False)
+                for i in sampled_indices:
+                    sampled_data.append(train_set_ori[i][0])
+            else:
+                raise ValueError("The class has fewer samples than ipc!")
+        return torch.stack(sampled_data)
+    elif method == "path":
+        try:
+            return torch.load(path)
+        except ValueError:
+            raise ValueError(f"Failed to load images from path: {path}")
+    else:
+        raise NotImplementedError("Initialize data either with Gaussian noise or real dataset")

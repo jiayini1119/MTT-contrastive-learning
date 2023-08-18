@@ -210,18 +210,21 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='PyTorch Contrastive Learning.')
     parser.add_argument('--temperature', type=float, default=0.5, help='InfoNCE temperature')
     parser.add_argument("--batch-size", type=int, default=1024, help='Training batch size')
-    parser.add_argument("--lr", type=float, default=0.0001, help='learning rate')
-    parser.add_argument("--num-epochs", type=int, default=400, help='Number of training epochs')
-    parser.add_argument("--test-freq", type=int, default=1, help='Frequency to fit a linear clf with L-BFGS for testing')
+    parser.add_argument("--lr", type=float, default=0.001, help='learning rate')
+    parser.add_argument("--num-epochs", type=int, default=100, help='Number of training epochs')
+    parser.add_argument("--test-freq", type=int, default=50, help='Frequency to fit a linear clf with L-BFGS for testing')
     parser.add_argument("--checkpoint-freq", type=int, default=10000, help="How often to checkpoint model")
     parser.add_argument('--dataset', type=str, default=str(SupportedDatasets.CIFAR10.value), help='dataset',
                         choices=[x.value for x in SupportedDatasets])
     parser.add_argument('--device', type=int, default=-1, help="GPU number to use")
     parser.add_argument("--device-ids", nargs = "+", default = None, help = "Specify device ids if using multiple gpus")
     parser.add_argument('--port', type=int, default=random.randint(49152, 65535), help="free port to use")
-    parser.add_argument('--seed', type=int, default=0, help="Seed for randomness")
+    parser.add_argument('--seed', type=int, default=3407, help="Seed for randomness")
     parser.add_argument('--num_expert', type=int, default=1, help="number of expert trajectories")
-    parser.add_argument('--reg_weight', type=float, default=0.00001, help="regularization weight")
+    parser.add_argument('--reg_weight', type=float, default=0.0001, help="regularization weight")
+
+    parser.add_argument('--exp_ind', type=int, default=0, help="expert index")
+
 
     # Parse arguments
     args = parser.parse_args()
