@@ -29,7 +29,7 @@ def main(rank: int, world_size: int, args):
     
     for expert_index in range(args.num_expert):
 
-        expert_dir = os.path.join(f'ckpt_{args.dataset}', f'trajectory_{expert_index}')
+        expert_dir = os.path.join(f'ckpt_{args.dataset}', f'trajectory_{expert_index + 25}')
         os.makedirs(expert_dir, exist_ok=True)
         
         test_accuracies = []
@@ -175,7 +175,7 @@ def main(rank: int, world_size: int, args):
                 trainer.save_checkpoint(prefix=f"{DT_STRING}-{args.dataset}-{args.arch}-{epoch}")
             
 
-            epoch_file_name = os.path.join(expert_dir, f'trajectory_{expert_index}_epoch_{epoch}.pt')
+            epoch_file_name = os.path.join(expert_dir, f'trajectory_{expert_index + 25}_epoch_{epoch}.pt')
             torch.save(net.state_dict(), epoch_file_name)
 
         if not args.distributed or rank == 0:

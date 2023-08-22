@@ -2,10 +2,11 @@
 based on https://github.com/GeorgeCazenavette/mtt-distillation/
 """
 import torch.nn as nn
+import torch
 
 ''' ConvNet '''
 class ConvNet(nn.Module):
-    def __init__(self, net_width, net_depth, net_act, net_norm, net_pooling, channel=3, num_classes=None, im_size=(32,32)):
+    def __init__(self, net_width, net_depth, net_act, net_norm, net_pooling, channel=3, num_classes=None, im_size=(32,32), add_bn=False):
         super(ConvNet, self).__init__()
 
         self.features, shape_feat = self._make_layers(channel, net_width, net_depth, net_norm, net_act, net_pooling, im_size)
@@ -15,9 +16,17 @@ class ConvNet(nn.Module):
             self.classifier = nn.Linear(num_feat, num_classes)
         else:
             self.classifier = None
+        self.add_bn = add_bn
+        if add_bn:
+            self.bn = torch.nn.BatchNorm2d(channel)
+        else:
+            self.bn = None
 
     def forward(self, x):
         # print("MODEL DATA ON: ", x.get_device(), "MODEL PARAMS ON: ", self.classifier.weight.data.get_device())
+        if self.add_bn:
+            x = self.bn(x)
+
         out = self.features(x)
         out = out.view(out.size(0), -1)
         if self.classifier:
