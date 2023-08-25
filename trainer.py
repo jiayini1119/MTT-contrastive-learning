@@ -303,8 +303,8 @@ class SynTrainer(Trainer):
 
         for img_idx, image in enumerate(self.trainset_images):
             for aug_idx in range(self.n_augmentations):
-                # augmented_image = self.transform(image)
-                augmented_image = image
+                augmented_image = self.transform(image)
+                # augmented_image = image
                 inputs[aug_idx][img_idx] = augmented_image
 
         num_positive = len(inputs)
@@ -315,8 +315,6 @@ class SynTrainer(Trainer):
         loss = self.un_supcon_loss(z, num_positive)
 
         grad_net, grad_critic = torch.autograd.grad(loss, [self.student_params[-1], self.student_params_critic[-1]],create_graph=True)
-
-        print(grad_net)
 
         self.student_params.append(self.student_params[-1] - self.syn_lr * grad_net)
         self.student_params_critic.append(self.student_params_critic[-1] - self.syn_lr * grad_critic)

@@ -29,7 +29,7 @@ def main(rank: int, world_size: int, args):
     
     for expert_index in range(args.num_expert):
 
-        expert_dir = os.path.join(f'ckpt_{args.dataset}', f'trajectory_{expert_index + 25}')
+        expert_dir = os.path.join(f'checkpoint_{args.dataset}', f'trajectory_{expert_index}')
         os.makedirs(expert_dir, exist_ok=True)
         
         test_accuracies = []
@@ -173,10 +173,22 @@ def main(rank: int, world_size: int, args):
             # Checkpoint Model
             if ((not args.distributed or rank == 0) and (epoch + 1) % args.checkpoint_freq == 0):
                 trainer.save_checkpoint(prefix=f"{DT_STRING}-{args.dataset}-{args.arch}-{epoch}")
-            
 
-            epoch_file_name = os.path.join(expert_dir, f'trajectory_{expert_index + 25}_epoch_{epoch}.pt')
-            torch.save(net.state_dict(), epoch_file_name)
+            
+            net_dir = os.path.join(expert_dir, 'net')
+            os.makedirs(net_dir, exist_ok=True)
+
+            epoch_net_file_name = os.path.join(net_dir, f'trajectory_{expert_index}_epoch_{epoch}.pt')
+            torch.save(net.state_dict(), epoch_net_file_name)
+
+            projection_head_dir = os.path.join(expert_dir, 'projection_head')
+            os.makedirs(projection_head_dir, exist_ok=True)
+
+            epoch_projection_head_file_name = os.path.join(projection_head_dir, f'trajectory_{expert_index}_epoch_{epoch}.pt')
+            torch.save(critic.state_dict(), epoch_projection_head_file_name)
+
+
+
 
         if not args.distributed or rank == 0:
             print(f"best_test_acc: {trainer.best_acc}")

@@ -15,6 +15,7 @@ from utils.augmentation import KorniaAugmentation
 import torch.optim as optim
 from utils.random import Random
 
+import copy
 
 from models.projection_heads.critic import LinearCritic
 from trainer import SynTrainer
@@ -97,8 +98,6 @@ def main(args):
 
     syn_lr = torch.tensor(args.lr_teacher).to(device)
 
-
-
     optimizer_img = torch.optim.SGD([trainset_images], lr=args.lr_img, momentum=0.5)
     syn_lr = syn_lr.detach().to(device).requires_grad_(True)
     optimizer_lr = torch.optim.SGD([syn_lr], lr=args.lr_lr, momentum=0.5)
@@ -107,35 +106,56 @@ def main(args):
 
     for i in range(args.distillation_step + 1):
 
-        # sample an expert trajectory
-        # subdirectories = [d for d in os.listdir(f'ckpt_{args.dataset}') if os.path.isdir(os.path.join(f'ckpt_{args.dataset}', d))]
-
+        trajectories_dir = os.path.join(f'checkpoint_{args.dataset}')
+        # subdirectories = [d for d in os.listdir(trajectories_dir) if os.path.isdir(os.path.join(trajectories_dir, d))]
         # selected_directory = np.random.choice(subdirectories)
+
         selected_directory = "trajectory_0"
 
-        trajectories = os.path.join(f'ckpt_{args.dataset}', selected_directory)
-        matching_files = glob.glob(os.path.join(trajectories, f"{selected_directory}_epoch_*.pt"))
+        trajectories = os.path.join(trajectories_dir, selected_directory)
+        matching_files = glob.glob(os.path.join(trajectories, 'net', f"{selected_directory}_epoch_*.pt"))
+        if len(matching_files) < 0:
+            raise ValueError("no matching files")
 
-        initial_trajectory = np.random.choice([f for f in matching_files if int(f.split('_epoch_')[-1].split('.pt')[0]) < args.max_start_epoch])
-        initial_trajectory_dict = torch.load(initial_trajectory)
+        initial_trajectory_epoch = np.random.choice([int(f.split('_epoch_')[-1].split('.pt')[0]) for f in matching_files if int(f.split('_epoch_')[-1].split('.pt')[0]) < args.max_start_epoch])
 
-        student_params_start = [initial_trajectory_dict[key] for key in initial_trajectory_dict]
+        net_checkpoint = os.path.join(trajectories, 'net', f'{selected_directory}_epoch_{initial_trajectory_epoch}.pt')
 
-        student_params = [torch.cat([p.data.to(device).reshape(-1) for p in student_params_start], 0).requires_grad_(True)]
-
-        starting_params = torch.cat([p.data.to(device).reshape(-1) for p in student_params_start], 0)
+        if os.path.exists(net_checkpoint):
+            initial_trajectory_dict = torch.load(net_checkpoint)
+        else:
+            raise ValueError("net checkpoint does not exist")
+        projection_head_checkpoint = os.path.join(trajectories, 'projection_head', f'{selected_directory}_epoch_{initial_trajectory_epoch}.pt')
+        if os.path.exists(projection_head_checkpoint):
+            initial_critic_trajectory_dict = torch.load(projection_head_checkpoint)
+        else:
+            raise ValueError("projection head checkpoint does not exist")
 
         net_width, net_depth, net_act, net_norm, net_pooling = 128, 3, 'relu', 'instancenorm', 'avgpooling'
         ori_net = ConvNet(net_width=net_width, net_depth=net_depth, net_act=net_act, net_norm=net_norm, net_pooling=net_pooling, channel=ori_datasets.channel, add_bn=False).to(device)
-
-        ori_critic = LinearCritic(ori_net.representation_dim, temperature=args.temperature).to(device)
-
-        num_params = sum([np.prod(p.size()) for p in (ori_net.parameters())])
+        ori_net_cp = copy.deepcopy(ori_net)
 
         net = ReparamModule(ori_net)
-        critic_params_list = list(ori_critic.parameters())
+        num_params = sum([np.prod(p.size()) for p in (net.parameters())])
+
+        ori_net_cp.load_state_dict(initial_trajectory_dict)
+        student_params_list = list(ori_net_cp.parameters())
+        for param in student_params_list:
+            param.detach_()
+
+        starting_params = torch.cat([p.data.to(device).reshape(-1) for p in student_params_list], 0)
+        student_params = [torch.cat([p.data.to(device).reshape(-1) for p in student_params_list], 0).requires_grad_(True)]
+
+        ori_critic = LinearCritic(ori_net.representation_dim, temperature=args.temperature).to(device)
+        ori_critic_cp = copy.deepcopy(ori_critic)
+
         critic = ReparamModule(ori_critic)
 
+        ori_critic_cp.load_state_dict(initial_critic_trajectory_dict)
+        critic_params_list = list(ori_critic_cp.parameters())
+        for param in critic_params_list:
+            param.detach_()
+        
         student_params_critic = [torch.cat([p.data.to(device).reshape(-1) for p in critic_params_list], 0).requires_grad_(True)]
 
         clftrainloader = torch.utils.data.DataLoader(
@@ -185,6 +205,9 @@ def main(args):
         # test_acc = trainer.test()
         # print("linear probe over randomly initialized network test accuracy: ", test_acc)
 
+        param_loss_list = []
+        param_dist_list = []
+
         for epoch in range(0, args.syn_steps):
             print(f"step: {epoch}")
             train_loss = trainer.train()
@@ -214,11 +237,10 @@ def main(args):
         optimizer_img.zero_grad()
 
         # Get target params
-        initial_epoch_num = int(initial_trajectory.split('_epoch_')[-1].split('.pt')[0])
-        final_epoch_num = initial_epoch_num + args.expert_epochs
+        final_epoch_num = initial_trajectory_epoch + args.expert_epochs
 
         final_trajectory_name = f"{selected_directory}_epoch_{final_epoch_num}.pt"
-        final_trajectory_path = os.path.join(trajectories, final_trajectory_name)
+        final_trajectory_path = os.path.join(trajectories, 'net', final_trajectory_name)
 
         if os.path.exists(final_trajectory_path):
             print(f"Found final trajectory at {final_trajectory_path}")
@@ -238,10 +260,13 @@ def main(args):
         param_dist += torch.nn.functional.mse_loss(starting_params, target_params, reduction="sum")
         print("param_dist: ", param_dist)
 
-        # param_loss /= num_params
-        # param_dist /= num_params
+        param_loss /= num_params
+        param_dist /= num_params
 
-        # param_loss /= param_dist
+        param_loss /= param_dist
+
+        param_loss_list.append(param_loss)
+        param_dist_list.append(param_dist)
 
         grand_loss = param_loss
 
@@ -253,11 +278,18 @@ def main(args):
         grand_loss.backward()
 
         print(trainset_images.grad)
-        print(syn_lr)
-        print(syn_lr.grad)
+        # print(syn_lr)
+        # print(syn_lr.grad)
 
         optimizer_img.step()
         optimizer_lr.step()
+
+        # print("Check")
+        # print("1")
+        # img_grad = torch.autograd.grad(grand_loss, trainset_images)[0]
+        # print(img_grad)
+        # print("2")
+        # print(trainset_images.grad)
 
         for _ in student_params:
             del _
@@ -280,20 +312,20 @@ if __name__ == '__main__':
     parser.add_argument('--model', type=str, default='ConvNet', help='model')
     parser.add_argument('--ipc', type=int, default=1, help='image(s) per class')
     parser.add_argument('--distillation_step', type=int, default=10, help='how many distillation steps to perform')
-    parser.add_argument('--lr_img', type=float, default=0.01, help='learning rate for updating synthetic data')
+    parser.add_argument('--lr_img', type=float, default=1, help='learning rate for updating synthetic data')
     parser.add_argument('--lr', type=float, default=1e-03, help='simclr learning rate')
     parser.add_argument('--lr_teacher', type=float, default=0.01, help='initialization for synthetic data learning rate')
     # parser.add_argument("--batch_size", type=int, default=50, help='Training batch size for inner loop')
     parser.add_argument("--test_batch_size", type=int, default=1024, help='Testing and classification set batch size')
 
 
-    parser.add_argument('--expert_epochs', type=int, default=50, help='how many expert epochs the target params are')
-    parser.add_argument('--syn_steps', type=int, default=500, help='how many steps to take on synthetic data')
+    parser.add_argument('--expert_epochs', type=int, default=20, help='how many expert epochs the target params are')
+    parser.add_argument('--syn_steps', type=int, default=50, help='how many steps to take on synthetic data')
     parser.add_argument('--max_start_epoch', type=int, default=30, help='max epoch we can start at')
     parser.add_argument('--seed', type=int, default=3407, help="Seed for randomness")
     parser.add_argument('--temperature', type=float, default=0.5, help='InfoNCE temperature')
     parser.add_argument('--reg_weight', type=float, default=0.001, help="regularization weight")
-    parser.add_argument('--syn_init_method', type=str, default="random", help="how to initialize the synthetic data")
+    parser.add_argument('--syn_init_method', type=str, default="real", help="how to initialize the synthetic data")
     parser.add_argument("--path", type=str, default=None, help='Path of the initial image. Should be specified if syn_init_method is set to path.')
     parser.add_argument("--test-freq", type=int, default=100, help='Frequency to fit a linear clf with L-BFGS for testing')
     parser.add_argument("--lr_lr", type=float, default=1e-05, help='lr for lr')
