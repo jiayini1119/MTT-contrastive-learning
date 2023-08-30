@@ -106,18 +106,36 @@ def main(args):
             }},
             step=epoch
         )
-
-    test_acc = trainer.test()
-    test_accuracies.append(test_acc)
-    print(f"test_acc: {test_acc}")
-    wandb.log(
-        data={"test": {
-        "acc": test_acc,
-        }},
-        step=epoch
-    )
+        
+        if ((epoch + 1) % args.test_freq == 0):
+            test_acc = trainer.test()
+            test_accuracies.append(test_acc)
+            print(f"test_acc: {test_acc}")
+            wandb.log(
+                data={"test": {
+                "acc": test_acc,
+                }},
+                step=epoch
+            )
+    
+    wandb.log({"best_test_accuracy": max(test_accuracies)})
 
     print("best test accuracy: ", max(test_accuracies))
+
+
+
+    # test_acc = trainer.test()
+    # test_accuracies.append(test_acc)
+    # print(f"test_acc: {test_acc}")
+    # wandb.log(
+    #     data={"test": {
+    #     "acc": test_acc,
+    #     }},
+    #     step=epoch
+    # )
+
+    # print("best test accuracy: ", max(test_accuracies))
+
 
     wandb.finish(quiet=True)
 
@@ -129,13 +147,15 @@ if __name__ == '__main__':
                         choices=[x.value for x in SupportedDatasets])    
     parser.add_argument('--dip', type=str, default='distill', help='distilled image path')
     parser.add_argument('--model', type=str, default='ConvNet', help='model')
-    parser.add_argument('--lr', type=float, default=1e-04, help='learning rate')
+    parser.add_argument('--lr', type=float, default=1e-03, help='learning rate')
     parser.add_argument("--batch-size", type=int, default=50, help='Training batch size')
     parser.add_argument("--test-batch-size", type=int, default=1024, help='Testing and classification set batch size')
     parser.add_argument('--seed', type=int, default=3407, help="Seed for randomness")
     parser.add_argument('--temperature', type=float, default=0.5, help='InfoNCE temperature')
-    parser.add_argument('--reg_weight', type=float, default=0.001, help="regularization weight")
-    parser.add_argument('--num_epochs', type=int, default=200, help="number of epochs to train")
+    parser.add_argument('--reg_weight', type=float, default=0.0001, help="regularization weight")
+    parser.add_argument('--num_epochs', type=int, default=600, help="number of epochs to train")
+    parser.add_argument("--test-freq", type=int, default=20, help='Frequency to fit a linear clf with L-BFGS for testing')
+
 
 
     args = parser.parse_args()

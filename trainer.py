@@ -30,7 +30,8 @@ class Trainer():
         rank: int = 0,
         world_size: int = 1,
         lr_scheduler = None,
-        reg_weight = 0.00001
+        reg_weight = 0.00001,
+        label: Tensor = None,
     ):
         """
         :param device: Device to run on (GPU)
@@ -55,6 +56,8 @@ class Trainer():
         self.world_size = world_size
         self.reg_weight = reg_weight
 
+        self.label = label
+
         self.criterion = nn.CrossEntropyLoss()
         self.best_acc = 0
         self.best_rare_acc = 0
@@ -62,6 +65,43 @@ class Trainer():
     #########################################
     #           Loss Functions              #
     #########################################
+    
+    def supcon_loss(self, z: Tensor, num_positive: int):
+
+        targets = torch.cat([self.label] * num_positive)
+
+        batch_size = int(len(z) / num_positive)
+
+        if self.distributed:
+            all_z = [torch.zeros_like(z) for _ in range(self.world_size)]
+            dist.all_gather(all_z, z)
+            # Move all tensors to the same device
+            aug_z = []
+            for i in range(num_positive):
+                aug_z.append([])
+                for rank in range(self.world_size):
+                    if rank == self.rank:
+                        aug_z[-1].append(z[i * batch_size: (i+1) * batch_size])
+                    else:
+                        aug_z[-1].append(all_z[rank][i * batch_size: (i+1) * batch_size])
+            z = [torch.cat(aug_z_i, dim=0) for aug_z_i in aug_z]
+        else: 
+            aug_z = []
+            for i in range(num_positive):
+                aug_z.append(z[i * batch_size : (i + 1) * batch_size])
+            z = aug_z
+
+        sim = self.critic(z)
+        log_sum_exp_sim = torch.log(torch.sum(torch.exp(sim), dim=1))
+
+        pos_pairs = (targets.unsqueeze(1) == targets.unsqueeze(0)).to(self.device)
+        #print(pos_pairs)
+        inf_mask = (sim != float('-inf')).to(self.device)
+        pos_pairs = torch.logical_and(pos_pairs, inf_mask)
+        pos_count = torch.sum(pos_pairs, dim=1)
+        pos_sims = torch.nansum(sim * pos_pairs, dim=-1)
+        return torch.mean(-pos_sims / pos_count + log_sum_exp_sim)
+
     def un_supcon_loss(self, z: Tensor, num_positive: int):
         batch_size = int(len(z) / num_positive)
 
@@ -172,84 +212,6 @@ class SynTrainer(Trainer):
         self.reparam_critic = reparam_critic
         self.bn_layer=bn_layer
 
-    # def train(self):
-    #     # We don't need batch size. Just use the whole training datapoints.
-    #     self.net.train()
-    #     self.critic.train()
-
-    #     train_loss = 0
-    #     total_samples = len(self.trainset_images)
-    #     t = tqdm(range(total_samples), desc='Loss: **** ', bar_format='{desc}{bar}{r_bar}')
-
-    #     img_shape = self.trainset_images[0].shape
-
-    #     inputs = [torch.empty((total_samples,) + img_shape, device=self.device) for _ in range(self.n_augmentations)]
-
-    #     for img_idx, image in enumerate(self.trainset_images):
-    #         for aug_idx in range(self.n_augmentations):
-    #             augmented_image = self.transform(image)
-    #             inputs[aug_idx][img_idx] = augmented_image
-
-    #     num_positive = len(inputs)
-    #     x = torch.cat(inputs, dim=0).to(self.device)
-    #     self.encoder_optimizer.zero_grad()
-    #     z = self.net(x)
-    #     loss = self.un_supcon_loss(z, num_positive)
-    #     loss.backward()
-
-    #     self.encoder_optimizer.step()
-    #     train_loss += loss.item()
-    #     t.set_description('Loss: %.3f ' % train_loss)
-
-
-    #     if self.lr_scheduler is not None:
-    #         self.lr_scheduler.step()
-    #         print("lr:", self.scale_lr * self.lr_scheduler.get_last_lr()[0])
-
-    #     return train_loss
-
-    # def train(self):
-    #     self.net.train()
-    #     self.critic.train()
-
-    #     train_loss = 0
-    #     total_samples = len(self.trainset_images)
-    #     num_batches = (total_samples + self.batch_size - 1) // self.batch_size
-    #     t = tqdm(range(num_batches), desc='Loss: **** ', bar_format='{desc}{bar}{r_bar}')
-
-    #     indices = torch.randperm(total_samples) # shuffle
-
-    #     for batch_idx in t:
-    #         start_idx = batch_idx * self.batch_size
-    #         end_idx = min((batch_idx + 1) * self.batch_size, total_samples)
-    #         these_indices = indices[start_idx:end_idx]
-    #         batch_images = self.trainset_images[these_indices].to(self.device)
-
-    #         batch_size_ind = len(batch_images)
-    #         img_shape = batch_images[0].shape
-
-    #         inputs = [torch.empty((batch_size_ind,) + img_shape, device=self.device) for _ in range(self.n_augmentations)]
-
-    #         for img_idx, image in enumerate(batch_images):
-    #             for aug_idx in range(self.n_augmentations):
-    #                 augmented_image = self.transform(image)
-    #                 inputs[aug_idx][img_idx] = augmented_image
-        
-    #         num_positive = len(inputs)
-    #         x = torch.cat(inputs, dim=0).to(self.device)
-    #         self.encoder_optimizer.zero_grad()
-    #         z = self.net(x)
-    #         loss = self.un_supcon_loss(z, num_positive)
-    #         loss.backward()
-    #         self.encoder_optimizer.step()
-    #         train_loss += loss.item()
-    #         t.set_description('Loss: %.3f ' % (train_loss / (batch_idx + 1)))
-
-    #     if self.lr_scheduler is not None:
-    #         self.lr_scheduler.step()
-    #         print("lr:", self.scale_lr * self.lr_scheduler.get_last_lr()[0])
-
-    #     return train_loss / num_batches
 
 
     def un_supcon_loss(self, z: Tensor, num_positive: int):

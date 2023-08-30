@@ -48,10 +48,10 @@ def KorniaAugmentation(dataset):
         )
     else:
         return kornia.augmentation.AugmentationSequential(
-            kornia.augmentation.RandomResizedCrop((32, 32), scale=(0.08, 1.0), same_on_batch=True),
-            kornia.augmentation.RandomHorizontalFlip(same_on_batch=True),
-            kornia.augmentation.ColorJiggle(0.4, 0.4, 0.4, 0.1, same_on_batch=True, p=0.8),
-            kornia.augmentation.RandomGrayscale(same_on_batch=True, p=0.2),
+            kornia.augmentation.RandomResizedCrop((32, 32), scale=(0.08, 1.0), same_on_batch=True, keepdim=True),
+            kornia.augmentation.RandomHorizontalFlip(same_on_batch=True, keepdim=True),
+            kornia.augmentation.ColorJiggle(0.4, 0.4, 0.4, 0.1, same_on_batch=True, p=0.8, keepdim=True),
+            kornia.augmentation.RandomGrayscale(same_on_batch=True, p=0.2, keepdim=True),
             # kornia.augmentation.Normalize(*CACHED_MEAN_STD[dataset],keepdim=True),
         )
 

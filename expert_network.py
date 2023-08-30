@@ -142,6 +142,9 @@ def main(rank: int, world_size: int, args):
             reg_weight=args.reg_weight,
         )
 
+        # test_acc = trainer.test()
+        # print("linear probe over randomly initialized network test accuracy: ", test_acc)
+
         acc_epoch = 0
 
         for epoch in range(0, args.num_epochs):

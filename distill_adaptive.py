@@ -107,18 +107,18 @@ def main(args):
     for i in range(args.distillation_step + 1):
 
         trajectories_dir = os.path.join(f'checkpoint_{args.dataset}')
-        subdirectories = [d for d in os.listdir(trajectories_dir) if os.path.isdir(os.path.join(trajectories_dir, d))]
-        selected_directory = np.random.choice(subdirectories)
+        # subdirectories = [d for d in os.listdir(trajectories_dir) if os.path.isdir(os.path.join(trajectories_dir, d))]
+        # selected_directory = np.random.choice(subdirectories)
 
-        # selected_directory = "trajectory_0"
+        selected_directory = "trajectory_0"
 
         trajectories = os.path.join(trajectories_dir, selected_directory)
         matching_files = glob.glob(os.path.join(trajectories, 'net', f"{selected_directory}_epoch_*.pt"))
         if len(matching_files) < 0:
             raise ValueError("no matching files")
 
-        initial_trajectory_epoch = np.random.choice([int(f.split('_epoch_')[-1].split('.pt')[0]) for f in matching_files if int(f.split('_epoch_')[-1].split('.pt')[0]) < args.max_start_epoch])
-        # initial_trajectory_epoch = 5
+        # initial_trajectory_epoch = np.random.choice([int(f.split('_epoch_')[-1].split('.pt')[0]) for f in matching_files if int(f.split('_epoch_')[-1].split('.pt')[0]) < args.max_start_epoch])
+        initial_trajectory_epoch = (i // 50) * 10 + 5
 
         net_checkpoint = os.path.join(trajectories, 'net', f'{selected_directory}_epoch_{initial_trajectory_epoch}.pt')
 
@@ -264,7 +264,7 @@ def main(args):
         # param_loss /= num_params
         # param_dist /= num_params
 
-        param_loss /= param_dist
+        # param_loss /= param_dist
 
         param_loss_list.append(param_loss)
         param_dist_list.append(param_dist)
@@ -310,7 +310,7 @@ if __name__ == '__main__':
     parser.add_argument('--model', type=str, default='ConvNet', help='model')
     parser.add_argument('--ipc', type=int, default=1, help='image(s) per class')
     parser.add_argument('--distillation_step', type=int, default=500, help='how many distillation steps to perform')
-    parser.add_argument('--lr_img', type=float, default=1000, help='learning rate for updating synthetic data')
+    parser.add_argument('--lr_img', type=float, default=10, help='learning rate for updating synthetic data')
     parser.add_argument('--lr', type=float, default=1e-03, help='simclr learning rate')
     parser.add_argument('--lr_teacher', type=float, default=0.01, help='initialization for synthetic data learning rate')
     # parser.add_argument("--batch_size", type=int, default=50, help='Training batch size for inner loop')
