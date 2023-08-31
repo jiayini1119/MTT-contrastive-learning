@@ -42,6 +42,12 @@ def main(args):
 
     distilled_images = distilled_images.detach().cpu()
 
+    # ipc = distilled_images.shape[0] / ori_datasets.num_classes
+
+    # print(ipc)
+
+    # labels = torch.cat([torch.tensor([i] * ipc) for i in range(ori_datasets.num_classes)])
+
     trainset = get_custom_dataset(dataset_images=distilled_images, device=device, dataset=args.dataset)
 
     net_width, net_depth, net_act, net_norm, net_pooling = 128, 3, 'relu', 'instancenorm', 'avgpooling'
@@ -56,7 +62,7 @@ def main(args):
 
     trainloader = torch.utils.data.DataLoader(
             dataset=trainset,
-            batch_size=args.test_batch_size,
+            batch_size=args.batch_size,
             shuffle=True,
             num_workers=5,
             pin_memory=True,
@@ -72,7 +78,7 @@ def main(args):
 
     testloader = torch.utils.data.DataLoader(
             dataset=testset,
-            batch_size=args.batch_size, 
+            batch_size=args.test_batch_size, 
             shuffle=False, 
             num_workers=6,
             pin_memory=True,
@@ -91,51 +97,100 @@ def main(args):
         reg_weight=args.reg_weight,
     )
 
-    test_acc = trainer.test()
-    print("linear probe over randomly initialized network test accuracy: ", test_acc)
+    if not args.supervised_cl:
+        test_acc = trainer.test()
+        print("linear probe over randomly initialized network test accuracy: ", test_acc)
 
-    test_accuracies = []
+        test_accuracies = []
 
-    for epoch in range(0, args.num_epochs):
-        print(f"step: {epoch}")
-        train_loss = trainer.train()
-        print(f"train_loss: {train_loss}")
-        wandb.log(
-            data={"train": {
-            "loss": train_loss,
-            }},
-            step=epoch
-        )
-        
-        if ((epoch + 1) % args.test_freq == 0):
-            test_acc = trainer.test()
-            test_accuracies.append(test_acc)
-            print(f"test_acc: {test_acc}")
+        for epoch in range(0, args.num_epochs):
+            print(f"step: {epoch}")
+            train_loss = trainer.train()
+            print(f"train_loss: {train_loss}")
             wandb.log(
-                data={"test": {
-                "acc": test_acc,
+                data={"train": {
+                "loss": train_loss,
                 }},
                 step=epoch
             )
-    
-    wandb.log({"best_test_accuracy": max(test_accuracies)})
+            
+            if ((epoch + 1) % args.test_freq == 0):
+                test_acc = trainer.test()
+                test_accuracies.append(test_acc)
+                print(f"test_acc: {test_acc}")
+                wandb.log(
+                    data={"test": {
+                    "acc": test_acc,
+                    }},
+                    step=epoch
+                )
+        
+        wandb.log({"best_test_accuracy": max(test_accuracies)})
 
-    print("best test accuracy: ", max(test_accuracies))
+        print("best test accuracy: ", max(test_accuracies))
 
-
-
-    # test_acc = trainer.test()
-    # test_accuracies.append(test_acc)
-    # print(f"test_acc: {test_acc}")
-    # wandb.log(
-    #     data={"test": {
-    #     "acc": test_acc,
-    #     }},
-    #     step=epoch
-    # )
+        # test_acc = trainer.test()
+        # test_accuracies.append(test_acc)
+        # print(f"test_acc: {test_acc}")
+        # wandb.log(
+        #     data={"test": {
+        #     "acc": test_acc,
+        #     }},
+        #     step=epoch
+        # )
 
     # print("best test accuracy: ", max(test_accuracies))
 
+    else:
+        ori_datasets_with_trainset = get_datasets(args.dataset, need_train_ori=True)
+        ori_trainset = ori_datasets_with_trainset.trainset_ori
+        ori_trainloader = torch.utils.data.DataLoader(
+            dataset=ori_trainset,
+            batch_size=args.test_batch_size,
+            shuffle=True,
+            num_workers=5,
+            pin_memory=True,
+        )
+
+        train_loss, test_loss = trainer.test_supcon(ori_trainloader)
+
+        print(f"random encoder train accuracy: {train_loss}, test accuracy: {test_loss}")
+
+        train_loss_evals = []
+        test_loss_evals = []
+
+        for epoch in range(0, args.num_epochs):
+            print(f"step: {epoch}")
+            train_loss = trainer.train()
+            print(f"train_loss: {train_loss}")
+            wandb.log(
+                data={"train": {
+                "loss": train_loss,
+                }},
+                step=epoch
+            )
+            
+            if ((epoch + 1) % args.test_freq == 0):
+                train_loss_eval, test_loss_eval = trainer.test_supcon(ori_trainloader)
+                train_loss_evals.append(train_loss_eval)
+                test_loss_evals.append(test_loss_eval)
+                wandb.log(
+                    data={
+                        "train_eval": {
+                            "loss": train_loss_eval,
+                        },
+                        "test_eval": {
+                            "loss": test_loss_eval,
+                        }
+                    },
+                    step=epoch
+                )
+
+        wandb.log({"best_train_loss": min(train_loss_evals)})
+        wandb.log({"best_test_loss": min(test_loss_evals)})
+
+        print("best train loss: ", min(train_loss_evals))
+        print("best test loss: ", min(test_loss_evals))
 
     wandb.finish(quiet=True)
 
@@ -155,7 +210,7 @@ if __name__ == '__main__':
     parser.add_argument('--reg_weight', type=float, default=0.0001, help="regularization weight")
     parser.add_argument('--num_epochs', type=int, default=600, help="number of epochs to train")
     parser.add_argument("--test-freq", type=int, default=20, help='Frequency to fit a linear clf with L-BFGS for testing')
-
+    parser.add_argument("--supervised_cl", action='store_true', help='Whether to evaluate using supervised contrastive learning loss')
 
 
     args = parser.parse_args()

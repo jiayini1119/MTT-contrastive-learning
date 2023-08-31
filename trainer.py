@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List
 
 from torch import Tensor, nn
 import torch
@@ -6,13 +6,11 @@ import torch.distributed as dist
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-import gc
 
 
 from evaluate.lbfgs import encode_train_set, train_clf, test_clf
 from models.projection_heads.critic import LinearCritic
 from utils.augmentation import KorniaAugmentation
-from multiprocessing import Process, Array
 
 
 class Trainer():
@@ -31,7 +29,6 @@ class Trainer():
         world_size: int = 1,
         lr_scheduler = None,
         reg_weight = 0.00001,
-        label: Tensor = None,
     ):
         """
         :param device: Device to run on (GPU)
@@ -56,8 +53,6 @@ class Trainer():
         self.world_size = world_size
         self.reg_weight = reg_weight
 
-        self.label = label
-
         self.criterion = nn.CrossEntropyLoss()
         self.best_acc = 0
         self.best_rare_acc = 0
@@ -66,10 +61,7 @@ class Trainer():
     #           Loss Functions              #
     #########################################
     
-    def supcon_loss(self, z: Tensor, num_positive: int):
-
-        targets = torch.cat([self.label] * num_positive)
-
+    def supcon_loss(self, z: Tensor, num_positive: int, label: int):
         batch_size = int(len(z) / num_positive)
 
         if self.distributed:
@@ -90,16 +82,21 @@ class Trainer():
             for i in range(num_positive):
                 aug_z.append(z[i * batch_size : (i + 1) * batch_size])
             z = aug_z
-
+        
         sim = self.critic(z)
         log_sum_exp_sim = torch.log(torch.sum(torch.exp(sim), dim=1))
-
+        targets = torch.cat([label] * num_positive)
+        # print(targets)
         pos_pairs = (targets.unsqueeze(1) == targets.unsqueeze(0)).to(self.device)
-        #print(pos_pairs)
+        # print(pos_pairs)
         inf_mask = (sim != float('-inf')).to(self.device)
         pos_pairs = torch.logical_and(pos_pairs, inf_mask)
+
         pos_count = torch.sum(pos_pairs, dim=1)
         pos_sims = torch.nansum(sim * pos_pairs, dim=-1)
+        res = torch.mean(-pos_sims / pos_count + log_sum_exp_sim)
+        if torch.isnan(res):
+            raise ValueError("supcon_loss is nan!")
         return torch.mean(-pos_sims / pos_count + log_sum_exp_sim)
 
     def un_supcon_loss(self, z: Tensor, num_positive: int):
@@ -123,7 +120,6 @@ class Trainer():
             for i in range(num_positive):
                 aug_z.append(z[i * batch_size : (i + 1) * batch_size])
             z = aug_z
-
         sim = self.critic(z)
         #print(sim)
         log_sum_exp_sim = torch.log(torch.sum(torch.exp(sim), dim=1))
@@ -175,6 +171,49 @@ class Trainer():
             self.best_acc = acc
             
         return acc
+
+    def test_supcon(self, ori_trainloader: DataLoader):
+        self.net.eval()  
+        self.critic.eval()
+
+        train_loss = 0
+        test_loss = 0
+        with torch.no_grad():
+            t = tqdm(enumerate(ori_trainloader), desc='Loss: **** ', total=len(ori_trainloader), bar_format='{desc}{bar}{r_bar}')
+            for batch_idx, (inputs, labels) in t:
+                inputs, labels = inputs.to(self.device), labels.to(self.device)
+                embeddings = self.net(inputs)
+                loss = torch.tensor(0)
+                try: 
+                    loss = self.supcon_loss(embeddings, 1, labels)  
+                except ValueError:
+                    loss = torch.tensor(0)
+                    print("Got nan for supcon loss")
+                train_loss += loss.item()
+                t.set_description('Loss: %.3f ' % (train_loss / (batch_idx + 1)))
+
+        train_loss /= len(ori_trainloader)
+        
+        with torch.no_grad():
+            t = tqdm(enumerate(self.testloader), desc='Loss: **** ', total=len(self.testloader), bar_format='{desc}{bar}{r_bar}')
+            for batch_idx, (inputs, labels) in t:
+                inputs, labels = inputs.to(self.device), labels.to(self.device)
+                embeddings = self.net(inputs)
+                loss = torch.tensor(0)
+                try:
+                    loss = self.supcon_loss(embeddings, 1, labels)  
+                except ValueError:
+                    loss = torch.tensor(0)
+                    print("Got nan for supcon loss")
+                loss = self.supcon_loss(embeddings, 1, labels)  
+                test_loss += loss.item()
+                t.set_description('Loss: %.3f ' % (test_loss / (batch_idx + 1)))
+
+        test_loss /= len(self.testloader)
+
+        print(f"Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}")
+
+        return train_loss, test_loss
 
     def save_checkpoint(self, prefix):
         if self.world_size > 1:

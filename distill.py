@@ -88,7 +88,7 @@ def main(args):
 
     trainset_images = get_init_syn_data(method=args.syn_init_method, dataset=args.dataset, ipc=args.ipc, path=args.path)
 
-    torch.save(trainset_images.cpu(), f"real_initial_images.pt")
+    torch.save(trainset_images.cpu(), f"random_10_real_initial_images.pt")
 
     labels = torch.cat([torch.tensor([i] * args.ipc) for i in range(ori_datasets.num_classes)])
 
