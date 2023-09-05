@@ -3,8 +3,7 @@ Adapted from https://github.com/sjoshi804/sas-data-efficient-contrastive-learnin
 """
 
 from enum import Enum
-
-from PIL import ImageFilter
+from PIL import Image, ImageFilter
 from torchvision import transforms
 import kornia
 
@@ -44,7 +43,7 @@ def KorniaAugmentation(dataset):
         return kornia.augmentation.AugmentationSequential(
             kornia.augmentation.RandomResizedCrop((28, 28), scale=(0.08, 1.0), same_on_batch=True, keepdim=True),
             kornia.augmentation.RandomHorizontalFlip(same_on_batch=True, keepdim=True),
-            # kornia.augmentation.Normalize(*CACHED_MEAN_STD[dataset],keepdim=True),
+            kornia.augmentation.Normalize(*CACHED_MEAN_STD[dataset],keepdim=True),
         )
     else:
         return kornia.augmentation.AugmentationSequential(
@@ -52,8 +51,17 @@ def KorniaAugmentation(dataset):
             kornia.augmentation.RandomHorizontalFlip(same_on_batch=True, keepdim=True),
             kornia.augmentation.ColorJiggle(0.4, 0.4, 0.4, 0.1, same_on_batch=True, p=0.8, keepdim=True),
             kornia.augmentation.RandomGrayscale(same_on_batch=True, p=0.2, keepdim=True),
-            # kornia.augmentation.Normalize(*CACHED_MEAN_STD[dataset],keepdim=True),
+            kornia.augmentation.Normalize(*CACHED_MEAN_STD[dataset],keepdim=True),
         )
+
+def CustomAugmentation(dataset):
+    return transforms.Compose([
+        transforms.RandomResizedCrop(32, interpolation=Image.BICUBIC),
+        transforms.RandomHorizontalFlip(),
+        ColourDistortion(s=0.5),
+        transforms.ToTensor(),
+        transforms.Normalize(*CACHED_MEAN_STD[dataset]),
+    ])
 
 
 class ImageFilterTransform(object):

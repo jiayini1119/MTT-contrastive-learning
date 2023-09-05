@@ -88,11 +88,17 @@ def main(args):
 
     trainset_images = get_init_syn_data(method=args.syn_init_method, dataset=args.dataset, ipc=args.ipc, path=args.path)
 
-    torch.save(trainset_images.cpu(), f"real_initial_images.pt")
+    torch.save(trainset_images.cpu(), f"random_10_real_initial_images.pt")
 
     labels = torch.cat([torch.tensor([i] * args.ipc) for i in range(ori_datasets.num_classes)])
 
     torch.save(labels.cpu(), "label.pt")
+
+    # print(trainset_images.shape)
+    # trainset_images = trainset_images[:2, :, :, :]
+    # print(trainset_images.shape)
+
+
 
     trainset_images = nn.Parameter(trainset_images.to(device).requires_grad_(True)).to(device)
 
@@ -117,8 +123,8 @@ def main(args):
         if len(matching_files) < 0:
             raise ValueError("no matching files")
 
-        # initial_trajectory_epoch = np.random.choice([int(f.split('_epoch_')[-1].split('.pt')[0]) for f in matching_files if int(f.split('_epoch_')[-1].split('.pt')[0]) < args.max_start_epoch])
-        initial_trajectory_epoch = (i // 50) * 10 + 5
+        initial_trajectory_epoch = np.random.choice([int(f.split('_epoch_')[-1].split('.pt')[0]) for f in matching_files if int(f.split('_epoch_')[-1].split('.pt')[0]) < args.max_start_epoch])
+        # initial_trajectory_epoch = 5
 
         net_checkpoint = os.path.join(trajectories, 'net', f'{selected_directory}_epoch_{initial_trajectory_epoch}.pt')
 
@@ -126,7 +132,7 @@ def main(args):
             initial_trajectory_dict = torch.load(net_checkpoint)
         else:
             raise ValueError("net checkpoint does not exist")
-        projection_head_checkpoint = os.path.join(trajectories, 'projection_head', f'{selected_directory}_epoch_{initial_trajectory_epoch}.pt')
+        projection_head_checkpoint = os.path.join(trajectories, 'projection_head', f'{selected_directory}_epoch_{initial_trajectory_epoch + args.expert_epochs}.pt')
         if os.path.exists(projection_head_checkpoint):
             initial_critic_trajectory_dict = torch.load(projection_head_checkpoint)
         else:
@@ -147,18 +153,10 @@ def main(args):
         starting_params = torch.cat([p.data.to(device).reshape(-1) for p in student_params_list], 0)
         student_params = [torch.cat([p.data.to(device).reshape(-1) for p in student_params_list], 0).requires_grad_(True)]
 
-        ori_critic = LinearCritic(ori_net.representation_dim, temperature=args.temperature).to(device)
-        ori_critic_cp = copy.deepcopy(ori_critic)
+        critic = LinearCritic(ori_net.representation_dim, temperature=args.temperature).to(device)
 
-        critic = ReparamModule(ori_critic)
-
-        ori_critic_cp.load_state_dict(initial_critic_trajectory_dict)
-        critic_params_list = list(ori_critic_cp.parameters())
-        for param in critic_params_list:
-            param.detach_()
+        critic.load_state_dict(initial_critic_trajectory_dict)
         
-        student_params_critic = [torch.cat([p.data.to(device).reshape(-1) for p in critic_params_list], 0).requires_grad_(True)]
-
         clftrainloader = torch.utils.data.DataLoader(
             dataset=clfset,
             batch_size=args.test_batch_size, 
@@ -188,14 +186,12 @@ def main(args):
             n_augmentations=2,
             transform=kornia_augmentations,
             student_params=student_params,
-            student_params_critic=student_params_critic,
             syn_lr = syn_lr,
             reparam_net = net,
-            reparam_critic = critic,
             device=device,
             distributed=False,
             net=ori_net,
-            critic=ori_critic,
+            critic=critic,
             clftrainloader=clftrainloader,
             testloader=testloader,
             num_classes=ori_datasets.num_classes,
@@ -235,8 +231,6 @@ def main(args):
         # After training - udpate Dsync
         print("Training of the student network finished")
 
-        optimizer_img.zero_grad()
-
         # Get target params
         final_epoch_num = initial_trajectory_epoch + args.expert_epochs
 
@@ -264,7 +258,7 @@ def main(args):
         # param_loss /= num_params
         # param_dist /= num_params
 
-        # param_loss /= param_dist
+        param_loss /= param_dist
 
         param_loss_list.append(param_loss)
         param_dist_list.append(param_dist)
@@ -286,20 +280,26 @@ def main(args):
 
         print(trainset_images.grad)
 
+        if args.verbose:
+            grad_avg = torch.mean(trainset_images.grad).item()
+            # with open(f"real_grad_averages_vs_ipc.txt", "a") as f:
+            #     f.write(f"IPC: {args.ipc}, Gradient Average: {grad_avg}\n")
+
+            with open(f"real_grad_averages_vs_N.txt", "a") as f:
+                f.write(f"N: {args.syn_steps}, Gradient Average: {grad_avg}\n")
+
         optimizer_img.step()
         optimizer_lr.step()
 
         for _ in student_params:
             del _
 
-        for _ in student_params_critic:
-            del _
     
-    # save the final dataset
-    save_dir = f"distilled_data_{args.dataset}_{DT_STRING}"
-    os.makedirs(save_dir, exist_ok=True) 
-    torch.save(trainset_images.cpu(), os.path.join(save_dir, "distilled_images.pt"))
-    print("Distilled dataset saved.")
+    # # save the final dataset
+    # save_dir = f"distilled_data_{args.dataset}_{DT_STRING}"
+    # os.makedirs(save_dir, exist_ok=True) 
+    # torch.save(trainset_images.cpu(), os.path.join(save_dir, "distilled_images.pt"))
+    # print("Distilled dataset saved.")
 
     wandb.finish(quiet=True)
 
@@ -309,8 +309,8 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default=str(SupportedDatasets.CIFAR10.value), help='dataset')
     parser.add_argument('--model', type=str, default='ConvNet', help='model')
     parser.add_argument('--ipc', type=int, default=1, help='image(s) per class')
-    parser.add_argument('--distillation_step', type=int, default=500, help='how many distillation steps to perform')
-    parser.add_argument('--lr_img', type=float, default=10, help='learning rate for updating synthetic data')
+    parser.add_argument('--distillation_step', type=int, default=5000, help='how many distillation steps to perform')
+    parser.add_argument('--lr_img', type=float, default=1000, help='learning rate for updating synthetic data')
     parser.add_argument('--lr', type=float, default=1e-03, help='simclr learning rate')
     parser.add_argument('--lr_teacher', type=float, default=0.01, help='initialization for synthetic data learning rate')
     # parser.add_argument("--batch_size", type=int, default=50, help='Training batch size for inner loop')
@@ -327,6 +327,8 @@ if __name__ == '__main__':
     parser.add_argument("--path", type=str, default=None, help='Path of the initial image. Should be specified if syn_init_method is set to path.')
     parser.add_argument("--test-freq", type=int, default=100000, help='Frequency to fit a linear clf with L-BFGS for testing')
     parser.add_argument("--lr_lr", type=float, default=1e-05, help='lr for lr')
+    parser.add_argument("--verbose", action='store_true', help='Whether to plot or not')
+
 
 
     args = parser.parse_args()

@@ -31,6 +31,8 @@ class ReparamModule(nn.Module):
         param_numels = []
         param_shapes = []
         for mn, m in self.named_modules():
+            # if "bn" in mn: 
+            #     m.requires_grad_(False)
             for n, p in m.named_parameters(recurse=False):
                 if p is not None:
                     if p in shared_param_memo:
