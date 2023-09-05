@@ -55,11 +55,12 @@ def KorniaAugmentation(dataset):
         )
 
 def CustomAugmentation(dataset):
+    # only for CIFAR 10 and CIFAR 100
     return transforms.Compose([
         transforms.RandomResizedCrop(32, interpolation=Image.BICUBIC),
         transforms.RandomHorizontalFlip(),
         ColourDistortion(s=0.5),
-        transforms.ToTensor(),
+        # transforms.ToTensor(),
         transforms.Normalize(*CACHED_MEAN_STD[dataset]),
     ])
 

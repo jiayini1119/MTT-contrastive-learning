@@ -25,6 +25,7 @@ def extract_embeddings(loader, model, device):
     labels = torch.cat(labels)
     return embeddings, labels
 
+# Evaluation KNN on the normalized embeddings
 def evaluate_knn(clftrain_embeddings, clftrain_labels, test_embeddings, test_labels):
     clftrain_embeddings = clftrain_embeddings / torch.norm(clftrain_embeddings, dim=1, keepdim=True)
     test_embeddings = test_embeddings / torch.norm(test_embeddings, dim=1, keepdim=True)
@@ -32,7 +33,6 @@ def evaluate_knn(clftrain_embeddings, clftrain_labels, test_embeddings, test_lab
     knn = KNeighborsClassifier(n_neighbors=5, weights="distance", n_jobs=-1)
     knn.fit(clftrain_embeddings, clftrain_labels)
     accuracy = knn.score(test_embeddings, test_labels)
-    print(f"KNN Accuracy: {accuracy*100:.2f}%")
     return accuracy
 
 def main(args):
@@ -65,7 +65,7 @@ def main(args):
 
     trainloader = torch.utils.data.DataLoader(
             dataset=trainset,
-            batch_size=args.test_batch_size,
+            batch_size=args.batch_size,
             shuffle=True,
             num_workers=5,
             pin_memory=True,
@@ -81,7 +81,7 @@ def main(args):
 
     testloader = torch.utils.data.DataLoader(
             dataset=testset,
-            batch_size=args.batch_size, 
+            batch_size=args.test_batch_size, 
             shuffle=False, 
             num_workers=6,
             pin_memory=True,
@@ -91,6 +91,8 @@ def main(args):
     test_embeddings, test_labels = extract_embeddings(testloader, net, device)
     initial_knn_accuracy = evaluate_knn(clftrain_embeddings, clftrain_labels, test_embeddings, test_labels)
     print("Initial KNN Accuracy: ", initial_knn_accuracy)
+
+    wandb.log({"Initial KNN Accuracy": initial_knn_accuracy})
 
     trainer = Trainer(
         device=device,
@@ -121,6 +123,8 @@ def main(args):
     test_embeddings, test_labels = extract_embeddings(testloader, net, device)
     updated_knn_accuracy = evaluate_knn(clftrain_embeddings, train_labels, test_embeddings, test_labels)
     print("KNN Accuracy after SimCLR training: ", updated_knn_accuracy)
+    wandb.log({"KNN Accuracy after SimCLR training": updated_knn_accuracy})
+
 
     wandb.finish(quiet=True)
 
@@ -131,7 +135,7 @@ if __name__ == '__main__':
     parser.add_argument('--dip', type=str, default='distill', help='distilled image path')
     parser.add_argument('--model', type=str, default='ConvNet', help='model')
     parser.add_argument('--lr', type=float, default=1e-03, help='learning rate')
-    parser.add_argument('--batch-size', type=int, default=50, help='batch size')
+    parser.add_argument('--batch-size', type=int, default=100, help='batch size')
     parser.add_argument('--seed', type=int, default=3407, help="Seed for randomness")
     parser.add_argument('--temperature', type=float, default=0.5, help='InfoNCE temperature')
     parser.add_argument("--test-batch-size", type=int, default=1024, help='Testing and classification set batch size')

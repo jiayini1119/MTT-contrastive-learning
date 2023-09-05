@@ -42,12 +42,6 @@ def main(args):
 
     distilled_images = distilled_images.detach().cpu()
 
-    # ipc = distilled_images.shape[0] / ori_datasets.num_classes
-
-    # print(ipc)
-
-    # labels = torch.cat([torch.tensor([i] * ipc) for i in range(ori_datasets.num_classes)])
-
     trainset = get_custom_dataset(dataset_images=distilled_images, device=device, dataset=args.dataset)
 
     net_width, net_depth, net_act, net_norm, net_pooling = 128, 3, 'relu', 'instancenorm', 'avgpooling'
@@ -203,7 +197,7 @@ if __name__ == '__main__':
     parser.add_argument('--dip', type=str, default='distill', help='distilled image path')
     parser.add_argument('--model', type=str, default='ConvNet', help='model')
     parser.add_argument('--lr', type=float, default=1e-03, help='learning rate')
-    parser.add_argument("--batch-size", type=int, default=50, help='Training batch size')
+    parser.add_argument("--batch-size", type=int, default=100, help='Training batch size')
     parser.add_argument("--test-batch-size", type=int, default=1024, help='Testing and classification set batch size')
     parser.add_argument('--seed', type=int, default=3407, help="Seed for randomness")
     parser.add_argument('--temperature', type=float, default=0.5, help='InfoNCE temperature')

@@ -34,7 +34,8 @@ class LinearCritic(nn.Module):
                 sim[(i, j)] = self.cossim(p[i].unsqueeze(-2), p[j].unsqueeze(-3)) / self.temperature
 
         d = sim[(0,0)].shape[-1]
-        assert sim[(0,0)].shape[-1] == sim[(0,1)].shape[-1]
+        if (0, 1) in sim:
+            assert sim[(0,0)].shape[-1] == sim[(0,1)].shape[-1]
         # d = sim[(0,1)].shape[-1]
         for i in range(len(p)):
             sim[(i,i)][..., range(d), range(d)] = float('-inf')  

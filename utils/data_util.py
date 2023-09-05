@@ -15,7 +15,7 @@ from collections import namedtuple
 from utils.augmentation import ColourDistortion
 from utils.dataset import *
 
-from utils.augmentation import CustomAugmentation 
+from utils.augmentation import KorniaAugmentation 
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
@@ -227,8 +227,8 @@ class CustomDatasetAugment(Dataset):
         return imgs
 
 def get_custom_dataset(dataset_images, device, dataset, num_positive=2):
-    custom_augmentation = CustomAugmentation(dataset).to(device)
-    trainset = CustomDatasetAugment(images=dataset_images, device=device, transform=custom_augmentation, n_augmentations=num_positive)
+    augmentation = KorniaAugmentation(dataset)
+    trainset = CustomDatasetAugment(images=dataset_images, device=device, transform=augmentation, n_augmentations=num_positive)
 
     return trainset
 
