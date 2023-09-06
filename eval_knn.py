@@ -136,7 +136,7 @@ if __name__ == '__main__':
     parser.add_argument('--model', type=str, default='ConvNet', help='model')
     parser.add_argument('--lr', type=float, default=1e-03, help='learning rate')
     parser.add_argument('--batch-size', type=int, default=100, help='batch size')
-    parser.add_argument('--seed', type=int, default=3407, help="Seed for randomness")
+    parser.add_argument('--seed', type=int, default=0, help="Seed for randomness")
     parser.add_argument('--temperature', type=float, default=0.5, help='InfoNCE temperature')
     parser.add_argument("--test-batch-size", type=int, default=1024, help='Testing and classification set batch size')
     parser.add_argument('--reg_weight', type=float, default=0.0001, help="regularization weight")

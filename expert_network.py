@@ -23,13 +23,11 @@ from utils.random import Random
 from utils.data_util import *
 from models.networks.convNet import *
 
-import matplotlib.pyplot as plt
-
 def main(rank: int, world_size: int, args):
     
     for expert_index in range(args.num_expert):
 
-        expert_dir = os.path.join(f'checkpoint_{args.dataset}', f'trajectory_{expert_index + 50}')
+        expert_dir = os.path.join(f'checkpoint_{args.dataset}', f'trajectory_{expert_index + 84}')
         os.makedirs(expert_dir, exist_ok=True)
         
         test_accuracies = []
@@ -51,10 +49,10 @@ def main(rank: int, world_size: int, args):
         if args.distributed:
             args.batch_size = int(args.batch_size / world_size)
 
-        # Set all seeds
-        torch.manual_seed(args.seed)
-        np.random.seed(args.seed)
-        Random(args.seed)
+        # # Set all seeds
+        # torch.manual_seed(args.seed)
+        # np.random.seed(args.seed)
+        # Random(args.seed)
 
         print('==> Preparing data..')
         datasets = get_datasets(args.dataset)
@@ -161,7 +159,6 @@ def main(rank: int, world_size: int, args):
                 )
 
             if (not args.distributed or rank == 0) and ((epoch + 1) % args.test_freq == 0):
-            # if (not args.distributed or rank == 0):
                 acc_epoch += 1
                 test_acc = trainer.test()
                 test_accuracies.append(test_acc)
@@ -181,16 +178,14 @@ def main(rank: int, world_size: int, args):
             net_dir = os.path.join(expert_dir, 'net')
             os.makedirs(net_dir, exist_ok=True)
 
-            epoch_net_file_name = os.path.join(net_dir, f'trajectory_{expert_index + 50}_epoch_{epoch}.pt')
+            epoch_net_file_name = os.path.join(net_dir, f'trajectory_{expert_index + 84}_epoch_{epoch}.pt')
             torch.save(net.state_dict(), epoch_net_file_name)
 
             projection_head_dir = os.path.join(expert_dir, 'projection_head')
             os.makedirs(projection_head_dir, exist_ok=True)
 
-            epoch_projection_head_file_name = os.path.join(projection_head_dir, f'trajectory_{expert_index + 50}_epoch_{epoch}.pt')
+            epoch_projection_head_file_name = os.path.join(projection_head_dir, f'trajectory_{expert_index + 84}_epoch_{epoch}.pt')
             torch.save(critic.state_dict(), epoch_projection_head_file_name)
-
-
 
 
         if not args.distributed or rank == 0:
@@ -204,14 +199,6 @@ def main(rank: int, world_size: int, args):
 
         if args.distributed:
             destroy_process_group()
-
-        # plt.plot(range(1, acc_epoch + 1), test_accuracies, label=f'Expert {expert_index}')
-        # plt.xlabel('Epoch')
-        # plt.ylabel('Test Accuracy')
-        # plt.legend()
-        # plot_name = f'{expert_index}_{DT_STRING}_{args.dataset}_plot.png'
-        # plt.savefig(plot_name)
-        # print(f'Saved plot as {plot_name}')
 
 ##############################################################
 # Distributed Training Setup
@@ -227,19 +214,18 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=1024, help='Training batch size')
     parser.add_argument("--lr", type=float, default=0.001, help='learning rate')
     parser.add_argument("--num-epochs", type=int, default=100, help='Number of training epochs')
-    parser.add_argument("--test-freq", type=int, default=50, help='Frequency to fit a linear clf with L-BFGS for testing')
+    parser.add_argument("--test-freq", type=int, default=100, help='Frequency to fit a linear clf with L-BFGS for testing')
     parser.add_argument("--checkpoint-freq", type=int, default=10000, help="How often to checkpoint model")
     parser.add_argument('--dataset', type=str, default=str(SupportedDatasets.CIFAR10.value), help='dataset',
                         choices=[x.value for x in SupportedDatasets])
     parser.add_argument('--device', type=int, default=-1, help="GPU number to use")
     parser.add_argument("--device-ids", nargs = "+", default = None, help = "Specify device ids if using multiple gpus")
     parser.add_argument('--port', type=int, default=random.randint(49152, 65535), help="free port to use")
-    parser.add_argument('--seed', type=int, default=3407, help="Seed for randomness")
+    parser.add_argument('--seed', type=int, default=0, help="Seed for randomness")
     parser.add_argument('--num_expert', type=int, default=1, help="number of expert trajectories")
     parser.add_argument('--reg_weight', type=float, default=0.0001, help="regularization weight")
 
     parser.add_argument('--exp_ind', type=int, default=0, help="expert index")
-
 
     # Parse arguments
     args = parser.parse_args()

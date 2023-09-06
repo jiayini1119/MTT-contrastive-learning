@@ -1,7 +1,5 @@
-from typing import List
-
-from torch import Tensor, nn
 import torch
+from torch import Tensor, nn
 import torch.distributed as dist 
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
@@ -227,7 +225,7 @@ class SynTrainer(Trainer):
     def __init__(
         self,
         trainset_images: Tensor,
-        # batch_size: int,
+        batch_size: int,
         n_augmentations: int,
         transform: KorniaAugmentation,
         student_params,
@@ -241,7 +239,7 @@ class SynTrainer(Trainer):
     ):
         super().__init__(*args, trainloader=None, optimizer=None, **kwargs)
         self.trainset_images = trainset_images.requires_grad_(True)
-        # self.batch_size = batch_size
+        self.batch_size = batch_size
         self.n_augmentations = n_augmentations
         self.transform = transform
         self.student_params = student_params
@@ -289,20 +287,72 @@ class SynTrainer(Trainer):
         pos_sims = torch.nansum(sim * pos_pairs, dim=-1)
         return torch.mean(-pos_sims / pos_count + log_sum_exp_sim)
 
+    # def train(self):
+    #     # We don't need batch size. Just use the whole training datapoints.
+    #     self.reparam_net.train()
+    #     self.reparam_critic.train()
+
+    #     train_loss = 0
+    #     total_samples = len(self.trainset_images)
+    #     t = tqdm(range(total_samples), desc='Loss: **** ', bar_format='{desc}{bar}{r_bar}')
+
+    #     img_shape = self.trainset_images[0].shape
+
+    #     inputs = [torch.empty((total_samples,) + img_shape, device=self.device) for _ in range(self.n_augmentations)]
+
+    #     for img_idx, image in enumerate(self.trainset_images):
+    #         for aug_idx in range(self.n_augmentations):
+    #             augmented_image = self.transform(image)
+    #             # augmented_image = image
+    #             inputs[aug_idx][img_idx] = augmented_image
+
+    #     num_positive = len(inputs)
+    #     x = torch.cat(inputs, dim=0).to(self.device)
+    #     forward_params = self.student_params[-1]
+    #     x = self.bn_layer(x)
+    #     z = self.reparam_net(x, flat_param = forward_params)
+    #     loss = self.un_supcon_loss(z, num_positive)
+
+    #     grad_net, grad_critic = torch.autograd.grad(loss, [self.student_params[-1], self.student_params_critic[-1]],create_graph=True)
+
+    #     self.student_params.append(self.student_params[-1] - self.syn_lr * grad_net)
+    #     self.student_params_critic.append(self.student_params_critic[-1] - self.syn_lr * grad_critic)
+
+    #     train_loss += loss.item()
+    #     t.set_description('Loss: %.3f ' % train_loss)
+
+
+    #     if self.lr_scheduler is not None:
+    #         raise NotImplementedError
+        
+    #     return train_loss
+
     def train(self):
-        # We don't need batch size. Just use the whole training datapoints.
+        # With batch size
         self.reparam_net.train()
         self.reparam_critic.train()
 
         train_loss = 0
         total_samples = len(self.trainset_images)
-        t = tqdm(range(total_samples), desc='Loss: **** ', bar_format='{desc}{bar}{r_bar}')
+        num_batches = (total_samples + self.batch_size - 1) // self.batch_size
+        t = tqdm(range(num_batches), desc='Loss: **** ', bar_format='{desc}{bar}{r_bar}')
+
+        indices = torch.randperm(total_samples) # shuffle
+
+        for batch_idx in t:
+            start_idx = batch_idx * self.batch_size
+            end_idx = min((batch_idx + 1) * self.batch_size, total_samples)
+            these_indices = indices[start_idx:end_idx]
+            batch_images = self.trainset_images[these_indices].to(self.device)
+
+            batch_size_ind = len(batch_images)
+            img_shape = batch_images[0].shape
 
         img_shape = self.trainset_images[0].shape
 
-        inputs = [torch.empty((total_samples,) + img_shape, device=self.device) for _ in range(self.n_augmentations)]
+        inputs = [torch.empty((batch_size_ind,) + img_shape, device=self.device) for _ in range(self.n_augmentations)]
 
-        for img_idx, image in enumerate(self.trainset_images):
+        for img_idx, image in enumerate(batch_images):
             for aug_idx in range(self.n_augmentations):
                 augmented_image = self.transform(image)
                 # augmented_image = image
@@ -310,6 +360,7 @@ class SynTrainer(Trainer):
 
         num_positive = len(inputs)
         x = torch.cat(inputs, dim=0).to(self.device)
+
         forward_params = self.student_params[-1]
         x = self.bn_layer(x)
         z = self.reparam_net(x, flat_param = forward_params)
@@ -328,104 +379,3 @@ class SynTrainer(Trainer):
             raise NotImplementedError
         
         return train_loss
-
-
-# class SynTrainer(Trainer):
-#     def __init__(
-#         self,
-#         trainset_images: Tensor,
-#         # batch_size: int,
-#         n_augmentations: int,
-#         transform: KorniaAugmentation,
-#         student_params,
-#         syn_lr: int,
-#         reparam_net,
-#         bn_layer,
-#         *args,
-#         **kwargs
-#     ):
-#         super().__init__(*args, trainloader=None, optimizer=None, **kwargs)
-#         self.trainset_images = trainset_images.requires_grad_(True)
-#         # self.batch_size = batch_size
-#         self.n_augmentations = n_augmentations
-#         self.transform = transform
-#         self.student_params = student_params
-#         self.syn_lr = syn_lr
-#         self.reparam_net = reparam_net
-#         self.bn_layer=bn_layer
-
-
-
-#     # def un_supcon_loss(self, z: Tensor, num_positive: int):
-#     #     batch_size = int(len(z) / num_positive)
-
-#     #     if self.distributed:
-#     #         all_z = [torch.zeros_like(z) for _ in range(self.world_size)]
-#     #         dist.all_gather(all_z, z)
-#     #         # Move all tensors to the same device
-#     #         aug_z = []
-#     #         for i in range(num_positive):
-#     #             aug_z.append([])
-#     #             for rank in range(self.world_size):
-#     #                 if rank == self.rank:
-#     #                     aug_z[-1].append(z[i * batch_size: (i+1) * batch_size])
-#     #                 else:
-#     #                     aug_z[-1].append(all_z[rank][i * batch_size: (i+1) * batch_size])
-#     #         z = [torch.cat(aug_z_i, dim=0) for aug_z_i in aug_z]
-#     #     else: 
-#     #         aug_z = []
-#     #         for i in range(num_positive):
-#     #             aug_z.append(z[i * batch_size : (i + 1) * batch_size])
-#     #         z = aug_z
-
-#     #     sim = self.reparam_critic(z, flat_param=self.student_params_critic[-1])
-#     #     #print(sim)
-#     #     log_sum_exp_sim = torch.log(torch.sum(torch.exp(sim), dim=1))
-#     #     # Positive Pairs Mask 
-#     #     p_targets = torch.cat([torch.tensor(range(int(len(sim) / num_positive)))] * num_positive)
-#     #     #len(p_targets)
-#     #     pos_pairs = (p_targets.unsqueeze(1) == p_targets.unsqueeze(0)).to(self.device)
-#     #     #print(pos_pairs)
-#     #     inf_mask = (sim != float('-inf')).to(self.device)
-#     #     pos_pairs = torch.logical_and(pos_pairs, inf_mask)
-#     #     pos_count = torch.sum(pos_pairs, dim=1)
-#     #     pos_sims = torch.nansum(sim * pos_pairs, dim=-1)
-#     #     return torch.mean(-pos_sims / pos_count + log_sum_exp_sim)
-
-#     def train(self):
-#         # We don't need batch size. Just use the whole training datapoints.
-#         self.reparam_net.train()
-#         self.critic.eval()
-
-#         train_loss = 0
-#         total_samples = len(self.trainset_images)
-#         t = tqdm(range(total_samples), desc='Loss: **** ', bar_format='{desc}{bar}{r_bar}')
-
-#         img_shape = self.trainset_images[0].shape
-
-#         inputs = [torch.empty((total_samples,) + img_shape, device=self.device) for _ in range(self.n_augmentations)]
-
-#         for img_idx, image in enumerate(self.trainset_images):
-#             for aug_idx in range(self.n_augmentations):
-#                 augmented_image = self.transform(image)
-#                 # augmented_image = image
-#                 inputs[aug_idx][img_idx] = augmented_image
-
-#         num_positive = len(inputs)
-#         x = torch.cat(inputs, dim=0).to(self.device)
-#         forward_params = self.student_params[-1]
-#         # x = self.bn_layer(x)
-#         z = self.reparam_net(x, flat_param = forward_params)
-#         loss = self.un_supcon_loss(z, num_positive)
-#         grad_net = torch.autograd.grad(loss, self.student_params[-1],create_graph=True)[0]
-
-#         self.student_params.append(self.student_params[-1] - self.syn_lr * grad_net)
-
-#         train_loss += loss.item()
-#         t.set_description('Loss: %.3f ' % train_loss)
-
-
-#         if self.lr_scheduler is not None:
-#             raise NotImplementedError
-        
-#         return train_loss

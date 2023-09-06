@@ -124,6 +124,11 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
         ])
     else:
         transform_clftrain = transform_test
+    
+    transform_train_ori = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(*CACHED_MEAN_STD[dataset]),
+    ])
 
     trainset = testset = clftrainset = num_classes = None
     
@@ -136,7 +141,7 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
         clftrainset = dset(root=root, train=True, download=True, transform=transform_clftrain)
         testset = dset(root=root, train=False, download=True, transform=transform_test)
         if need_train_ori:
-            trainset_ori=dset(root=root, train=True, download=True, transform=transforms.ToTensor())
+            trainset_ori=dset(root=root, train=True, download=True, transform=transform_train_ori)
         else:
             trainset_ori=None
         num_classes = 100
@@ -150,7 +155,7 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
         clftrainset = dset(root=root, train=True, download=True, transform=transform_clftrain)
         testset = dset(root=root, train=False, download=True, transform=transform_test)
         if need_train_ori:
-            trainset_ori=dset(root=root, train=True, download=True, transform=transforms.ToTensor())
+            trainset_ori=dset(root=root, train=True, download=True, transform=transform_train_ori)
         else:
             trainset_ori=None
         num_classes = 10
@@ -164,7 +169,7 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
         clftrainset = dset(root=root, train=True, download=True, transform=transform_clftrain)
         testset = dset(root=root, train=False, download=True, transform=transform_test)
         if need_train_ori:
-            trainset_ori=dset(root=root, train=True, download=True, transform=transforms.ToTensor())
+            trainset_ori=dset(root=root, train=True, download=True, transform=transform_train_ori)
         else:
             trainset_ori=None
         num_classes = 10
@@ -178,7 +183,7 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
         clftrainset = dset(root=root, split='train', download=True, transform=transform_clftrain)
         testset = dset(root=root, split='test', download=True, transform=transform_test)
         if need_train_ori:
-            trainset_ori=dset(root=root, split='train+unlabeled', download=True, transform=transforms.ToTensor())
+            trainset_ori=dset(root=root, split='train+unlabeled', download=True, transform=transform_train_ori)
         else:
             trainset_ori=None
         num_classes = 10
@@ -190,7 +195,7 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
         clftrainset = ImageFolder(root=f"{root}train/", transform=transform_clftrain)      
         testset = ImageFolder(root=f"{root}test/", transform=transform_train)   
         if need_train_ori:
-            trainset_ori=ImageFolder(root=f"{root}train/", transform=transforms.ToTensor())  
+            trainset_ori=ImageFolder(root=f"{root}train/", transform=transform_train_ori)  
         else:
             trainset_ori=None 
         num_classes = 200
@@ -202,7 +207,7 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
         clftrainset = ImageNet(root=f"{root}train_full/", transform=transform_clftrain)      
         testset = ImageNet(root=f"{root}test/", transform=transform_clftrain)     
         if need_train_ori:
-            trainset_ori=ImageNet(root=f"{root}train_full/", transform=transforms.ToTensor())
+            trainset_ori=ImageNet(root=f"{root}train_full/", transform=transform_train_ori)
         else:
             trainset_ori=None
         num_classes = 1000
@@ -227,7 +232,7 @@ class CustomDatasetAugment(Dataset):
         return imgs
 
 def get_custom_dataset(dataset_images, device, dataset, num_positive=2):
-    augmentation = KorniaAugmentation(dataset)
+    augmentation = KorniaAugmentation(dataset).to(device)
     trainset = CustomDatasetAugment(images=dataset_images, device=device, transform=augmentation, n_augmentations=num_positive)
 
     return trainset

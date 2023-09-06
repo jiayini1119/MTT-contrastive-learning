@@ -42,7 +42,7 @@ def main(args):
     ##############################################################
 
     trainset_images = get_init_syn_data(method=args.syn_init_method, dataset=args.dataset, ipc=args.ipc, path=args.path)
-    torch.save(trainset_images.cpu(), f"random_100_real_initial_images.pt")
+    # torch.save(trainset_images.cpu(), f"random_100_real_initial_images.pt")
 
     labels = torch.cat([torch.tensor([i] * args.ipc) for i in range(ori_datasets.num_classes)])
     torch.save(labels.cpu(), "label.pt")
@@ -159,8 +159,12 @@ def main(args):
 
         bn_layer = torch.nn.BatchNorm2d(ori_datasets.channel).to(device)
 
+        if args.batch_size is None:
+            args.batch_size = ori_datasets.num_classes * args.ipc
+
         trainer = SynTrainer(
             trainset_images=trainset_images,
+            batch_size=args.batch_size,
             n_augmentations=2,
             transform=kornia_augmentations,
             student_params=student_params,
@@ -266,11 +270,11 @@ def main(args):
         grand_loss.backward()
 
         print(trainset_images.grad)
-        grad_avg = torch.mean(trainset_images.grad).item()
+        grad_avg = torch.mean(abs(trainset_images.grad)).item()
         wandb.log(
             {
                 "syn_data_grad": {
-                    "grad_average": abs(grad_avg)
+                    "grad_average": grad_avg
                 }
             },
             step=i
@@ -322,18 +326,19 @@ if __name__ == '__main__':
     parser.add_argument('--distillation_step', type=int, default=5000, help='how many distillation steps to perform')
     parser.add_argument('--lr_img', type=float, default=1000, help='learning rate for updating synthetic data')
     parser.add_argument('--lr_teacher', type=float, default=0.01, help='initialization for synthetic data learning rate')
+    parser.add_argument('--batch_size', type=int, default=None, help='batch size for training the network')
     parser.add_argument("--test_batch_size", type=int, default=1024, help='Testing and classification set batch size')
     parser.add_argument('--expert_epochs', type=int, default=2, help='how many expert epochs the target params are')
     parser.add_argument('--syn_steps', type=int, default=20, help='how many steps to take on synthetic data')
     parser.add_argument('--max_start_epoch', type=int, default=30, help='max epoch we can start at')
-    parser.add_argument('--seed', type=int, default=3407, help="Seed for randomness")
+    parser.add_argument('--seed', type=int, default=0, help="Seed for randomness")
     parser.add_argument('--temperature', type=float, default=0.5, help='InfoNCE temperature')
     parser.add_argument('--reg_weight', type=float, default=0.001, help="regularization weight")
     parser.add_argument('--syn_init_method', type=str, default="real", help="how to initialize the synthetic data")
     parser.add_argument("--path", type=str, default=None, help='Path of the initial image. Should be specified if syn_init_method is set to path.')
     parser.add_argument("--test-freq", type=int, default=100000, help='Frequency to fit a linear clf with L-BFGS for testing')
     parser.add_argument("--lr_lr", type=float, default=1e-05, help='lr for lr')
-    parser.add_argument("--optimizer_img", type=str, default="Adam", choices=['Adam', 'SGD'], help='synthetic image optimizer')
+    parser.add_argument("--optimizer_img", type=str, default="SGD", choices=['Adam', 'SGD'], help='synthetic image optimizer')
     parser.add_argument("--verbose", action='store_true', help='Whether to plot or not')
 
     args = parser.parse_args()
