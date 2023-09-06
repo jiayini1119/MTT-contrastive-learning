@@ -190,9 +190,19 @@ def main(args):
         # Main Training Loop
         ##############################################################
 
+        indices_chunks = []
+
         for epoch in range(0, args.syn_steps):
             print(f"step: {epoch}")
-            train_loss = trainer.train()
+            
+            if not indices_chunks:
+                indices = torch.randperm(len(trainset_images))
+                indices_chunks = list(torch.split(indices, args.batch_size))
+            
+            these_indices = indices_chunks.pop()
+
+            train_loss = trainer.train(these_indices)
+            
             print(f"train_loss: {train_loss}")
             # wandb.log(
             #     data={"train": {
