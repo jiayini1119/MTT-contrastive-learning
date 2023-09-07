@@ -27,7 +27,7 @@ def main(rank: int, world_size: int, args):
     
     for expert_index in range(args.num_expert):
 
-        expert_dir = os.path.join(f'checkpoint_{args.dataset}', f'trajectory_{expert_index + 80}')
+        expert_dir = os.path.join(f'checkpoint_{args.dataset}', f'trajectory_{expert_index + args.offset}')
         os.makedirs(expert_dir, exist_ok=True)
         
         test_accuracies = []
@@ -88,7 +88,7 @@ def main(rank: int, world_size: int, args):
         trainloader = torch.utils.data.DataLoader(
             dataset=trainset,
             batch_size=args.batch_size,
-            shuffle=True,
+            shuffle=(not args.distributed),
             sampler=DistributedSampler(trainset, shuffle=True, num_replicas=world_size, rank=rank, drop_last=True) if args.distributed else None,
             num_workers=4,
             pin_memory=True,
@@ -158,7 +158,7 @@ def main(rank: int, world_size: int, args):
                     step=epoch
                 )
 
-            if (not args.distributed or rank == 0) and ((epoch + 1) % args.test_freq == 0):
+            if (args.test_freq > 0) and (not args.distributed or rank == 0) and ((epoch + 1) % args.test_freq == 0):
                 acc_epoch += 1
                 test_acc = trainer.test()
                 test_accuracies.append(test_acc)
@@ -171,20 +171,20 @@ def main(rank: int, world_size: int, args):
                 )
 
             # Checkpoint Model
-            if ((not args.distributed or rank == 0) and (epoch + 1) % args.checkpoint_freq == 0):
+            if (args.checkpoint_freq > 0) and ((not args.distributed or rank == 0) and (epoch + 1) % args.checkpoint_freq == 0):
                 trainer.save_checkpoint(prefix=f"{DT_STRING}-{args.dataset}-{args.arch}-{epoch}")
 
             
             net_dir = os.path.join(expert_dir, 'net')
             os.makedirs(net_dir, exist_ok=True)
 
-            epoch_net_file_name = os.path.join(net_dir, f'trajectory_{expert_index + 80}_epoch_{epoch}.pt')
+            epoch_net_file_name = os.path.join(net_dir, f'trajectory_{expert_index + args.offset}_epoch_{epoch}.pt')
             torch.save(net.state_dict(), epoch_net_file_name)
 
             projection_head_dir = os.path.join(expert_dir, 'projection_head')
             os.makedirs(projection_head_dir, exist_ok=True)
 
-            epoch_projection_head_file_name = os.path.join(projection_head_dir, f'trajectory_{expert_index + 80}_epoch_{epoch}.pt')
+            epoch_projection_head_file_name = os.path.join(projection_head_dir, f'trajectory_{expert_index + args.offset}_epoch_{epoch}.pt')
             torch.save(critic.state_dict(), epoch_projection_head_file_name)
 
 
@@ -226,6 +226,7 @@ if __name__ == "__main__":
     parser.add_argument('--reg_weight', type=float, default=0.0001, help="regularization weight")
 
     parser.add_argument('--exp_ind', type=int, default=0, help="expert index")
+    parser.add_argument('--offset', type=int, default=0, help="offset index used for collecting expert trajectories")
 
     # Parse arguments
     args = parser.parse_args()

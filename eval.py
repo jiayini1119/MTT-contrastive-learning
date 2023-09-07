@@ -126,7 +126,7 @@ def main(args):
                 step=epoch
             )
             
-            if ((epoch + 1) % args.test_freq == 0):
+            if ((args.test_freq > 0) and (epoch + 1) % args.test_freq == 0):
                 test_acc = trainer.test()
                 test_accuracies.append(test_acc)
                 print(f"test_acc: {test_acc}")
@@ -175,7 +175,7 @@ def main(args):
                 step=epoch
             )
             
-            if ((epoch + 1) % args.test_freq == 0):
+            if ((args.test_freq > 0) and (epoch + 1) % args.test_freq == 0):
                 train_loss_eval, test_loss_eval = trainer.test_supcon(ori_trainloader)
                 train_loss_evals.append(train_loss_eval)
                 test_loss_evals.append(test_loss_eval)

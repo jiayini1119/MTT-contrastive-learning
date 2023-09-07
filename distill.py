@@ -213,7 +213,7 @@ def main(args):
             # )
 
 
-            # if (epoch + 1) % args.test_freq == 0:
+            # if (args.test_freq > 0) and (epoch + 1) % args.test_freq == 0:
             #     test_acc = trainer.test()
             #     print(f"test_acc: {test_acc}")
             #     wandb.log(
