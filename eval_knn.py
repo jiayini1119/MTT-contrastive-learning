@@ -4,7 +4,8 @@ import torch
 import numpy as np
 import torch.optim as optim
 from sklearn.neighbors import KNeighborsClassifier
-from utils.data_util import *
+from utils.supported_dataset import *
+from utils.custom_dataset import *
 from models.networks.convNet import *
 from trainer import Trainer
 from utils.random import Random

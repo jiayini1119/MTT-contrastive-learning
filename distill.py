@@ -7,7 +7,8 @@ import glob
 import wandb
 from datetime import datetime
 from utils.reparam_module import *
-from utils.data_util import *
+from utils.supported_dataset import *
+from utils.custom_dataset import get_init_syn_data
 import numpy as np
 from models.networks.convNet import *
 from utils.augmentation import KorniaAugmentation

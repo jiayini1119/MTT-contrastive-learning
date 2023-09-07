@@ -18,7 +18,7 @@ from tqdm import tqdm
 
 import wandb
 # from sas.configs import SupportedDatasets, get_datasets
-from utils.data_util import *
+from utils.supported_dataset import *
 from evaluate.lbfgs import test_clf
 from utils.random import Random
 from models.networks.convNet import *

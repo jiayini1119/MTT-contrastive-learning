@@ -41,26 +41,27 @@ def BlurOrSharpen(radius=2.):
 def KorniaAugmentation(dataset):
     if dataset == SupportedDatasets.MNIST.value:
         return kornia.augmentation.AugmentationSequential(
-            kornia.augmentation.RandomResizedCrop((28, 28), scale=(0.08, 1.0), same_on_batch=True, keepdim=True),
-            kornia.augmentation.RandomHorizontalFlip(same_on_batch=True, keepdim=True),
-            kornia.augmentation.Normalize(*CACHED_MEAN_STD[dataset],keepdim=True),
+            kornia.augmentation.RandomResizedCrop((28, 28), scale=(0.08, 1.0), same_on_batch=True),
+            kornia.augmentation.RandomHorizontalFlip(same_on_batch=True),
+            kornia.augmentation.Normalize(*CACHED_MEAN_STD[dataset]),
         )
     else:
         return kornia.augmentation.AugmentationSequential(
-            kornia.augmentation.RandomResizedCrop((32, 32), scale=(0.08, 1.0), same_on_batch=True, keepdim=True),
-            kornia.augmentation.RandomHorizontalFlip(same_on_batch=True, keepdim=True),
-            kornia.augmentation.ColorJiggle(0.4, 0.4, 0.4, 0.1, same_on_batch=True, p=0.8, keepdim=True),
-            kornia.augmentation.RandomGrayscale(same_on_batch=True, p=0.2, keepdim=True),
-            kornia.augmentation.Normalize(*CACHED_MEAN_STD[dataset],keepdim=True),
+            kornia.augmentation.RandomResizedCrop((32, 32), scale=(0.08, 1.0), same_on_batch=True),
+            kornia.augmentation.RandomHorizontalFlip(same_on_batch=True),
+            kornia.augmentation.ColorJiggle(0.4, 0.4, 0.4, 0.1, same_on_batch=True, p=0.8),
+            kornia.augmentation.RandomGrayscale(same_on_batch=True, p=0.2),
+            kornia.augmentation.Normalize(*CACHED_MEAN_STD[dataset]),
         )
 
 def CustomAugmentation(dataset):
     # only for CIFAR 10 and CIFAR 100
+    # TODO: other datasets
     return transforms.Compose([
         transforms.RandomResizedCrop(32, interpolation=Image.BICUBIC),
         transforms.RandomHorizontalFlip(),
         ColourDistortion(s=0.5),
-        # transforms.ToTensor(),
+        transforms.ToTensor(),
         transforms.Normalize(*CACHED_MEAN_STD[dataset]),
     ])
 

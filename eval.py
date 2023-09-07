@@ -4,8 +4,8 @@ Evaluate distilled dataset (Linear Probe / Supervised Contrastive Loss)
 import argparse
 import wandb
 import torch
-
-from utils.data_util import *
+from utils.supported_dataset import *
+from utils.custom_dataset import *
 from models.networks.convNet import *
 import torch.optim as optim
 from utils.random import Random
@@ -146,7 +146,7 @@ def main(args):
 
     else:
         # Get original trainset with labels (Normalize? / Shuffle?)
-        ori_datasets_with_trainset = get_datasets(args.dataset, need_train_ori=True)
+        ori_datasets_with_trainset = get_datasets(args.dataset, need_train_ori=True, need_normalized=True)
         ori_trainset = ori_datasets_with_trainset.trainset_ori
         ori_trainloader = torch.utils.data.DataLoader(
             dataset=ori_trainset,

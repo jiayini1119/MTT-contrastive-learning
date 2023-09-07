@@ -20,14 +20,14 @@ import wandb
 from models.projection_heads.critic import LinearCritic
 from trainer import Trainer
 from utils.random import Random
-from utils.data_util import *
+from utils.supported_dataset import *
 from models.networks.convNet import *
 
 def main(rank: int, world_size: int, args):
     
     for expert_index in range(args.num_expert):
 
-        expert_dir = os.path.join(f'checkpoint_{args.dataset}', f'trajectory_{expert_index + 84}')
+        expert_dir = os.path.join(f'checkpoint_{args.dataset}', f'trajectory_{expert_index + 80}')
         os.makedirs(expert_dir, exist_ok=True)
         
         test_accuracies = []
@@ -178,13 +178,13 @@ def main(rank: int, world_size: int, args):
             net_dir = os.path.join(expert_dir, 'net')
             os.makedirs(net_dir, exist_ok=True)
 
-            epoch_net_file_name = os.path.join(net_dir, f'trajectory_{expert_index + 84}_epoch_{epoch}.pt')
+            epoch_net_file_name = os.path.join(net_dir, f'trajectory_{expert_index + 80}_epoch_{epoch}.pt')
             torch.save(net.state_dict(), epoch_net_file_name)
 
             projection_head_dir = os.path.join(expert_dir, 'projection_head')
             os.makedirs(projection_head_dir, exist_ok=True)
 
-            epoch_projection_head_file_name = os.path.join(projection_head_dir, f'trajectory_{expert_index + 84}_epoch_{epoch}.pt')
+            epoch_projection_head_file_name = os.path.join(projection_head_dir, f'trajectory_{expert_index + 80}_epoch_{epoch}.pt')
             torch.save(critic.state_dict(), epoch_projection_head_file_name)
 
 

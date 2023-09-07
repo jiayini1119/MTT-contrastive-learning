@@ -31,7 +31,7 @@
 
 import pickle
 import torch
-from utils.data_util import get_datasets
+from utils.custom_dataset import *
 
 with open("/home/jennyni/data/clcore-subset-idx.pkl", "rb") as f:
     data = pickle.load(f)
