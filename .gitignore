@@ -5,6 +5,8 @@
 *.png
 wandb
 *.txt
+!requirements.txt
+*.tar.gz
 
 data/
 ckpt_cifar10/
