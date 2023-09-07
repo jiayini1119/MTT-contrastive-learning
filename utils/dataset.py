@@ -11,6 +11,7 @@ import torch
 import torchvision
 from PIL import Image
 from torchvision.datasets import ImageFolder
+from torchvision.transforms import ToPILImage  
 
 class CIFAR10Augment(torchvision.datasets.CIFAR10):
     def __init__(self, root: str, transform=Callable, n_augmentations: int = 2, train: bool = True, download: bool = False):
@@ -56,9 +57,8 @@ class MNISTAugment(torchvision.datasets.MNIST):
             List of augmented views of element at index
         """
         img = self.data[index]
-        # doing this so that it is consistent with all other datasets
-        # to return a PIL Image
-        pil_img = Image.fromarray(np.transpose(img, (1, 2, 0)))
+        to_pil = ToPILImage()
+        pil_img = to_pil(img)
         imgs = []
         for _ in range(self.n_augmentations):
             imgs.append(self.transform(pil_img))

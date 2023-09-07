@@ -75,7 +75,7 @@ def get_datasets(dataset: str, augment_clf_train=False, add_indices_to_data=Fals
         transform_train = transforms.Compose([
             transforms.RandomResizedCrop(img_size, interpolation=Image.BICUBIC),
             transforms.RandomHorizontalFlip(),
-            # transforms.ToTensor(),
+            transforms.ToTensor(),
             transforms.Normalize(*CACHED_MEAN_STD[dataset]),
         ])
 

@@ -14,12 +14,6 @@ from trainer import Trainer
 
 def main(args):
 
-    try:
-        distilled_images = torch.load(args.dip)
-    except FileNotFoundError as e:
-        print(f"Error: {e}")
-        raise
-
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     wandb.init(
@@ -37,9 +31,16 @@ def main(args):
 
     clftrainset = ori_datasets.clftrainset
 
-    distilled_images = distilled_images.detach().cpu()
-
-    trainset = get_custom_dataset(dataset_images=distilled_images, device=device, dataset=args.dataset)
+    if args.dip is None:
+        trainset = ori_datasets.trainset
+    else:
+        try:
+            distilled_images = torch.load(args.dip)
+        except FileNotFoundError as e:
+            print(f"Error: {e}")
+            raise
+        distilled_images = distilled_images.detach().cpu()
+        trainset = get_custom_dataset(dataset_images=distilled_images, device=device, dataset=args.dataset)
 
     ##############################################################
     # Encoder and Critics
@@ -151,7 +152,7 @@ def main(args):
         ori_trainloader = torch.utils.data.DataLoader(
             dataset=ori_trainset,
             batch_size=args.test_batch_size,
-            shuffle=True,
+            shuffle=True, # TODO: shuffle?
             num_workers=5,
             pin_memory=True,
         )
@@ -204,10 +205,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='evaluate distilled dataset')
     parser.add_argument('--dataset', type=str, default=str(SupportedDatasets.CIFAR10.value), help='dataset',
                         choices=[x.value for x in SupportedDatasets])    
-    parser.add_argument('--dip', type=str, default='distill', help='distilled image path')
+    parser.add_argument('--dip', type=str, default=None, help='distilled image path')
     parser.add_argument('--model', type=str, default='ConvNet', help='model')
     parser.add_argument('--lr', type=float, default=1e-03, help='learning rate') 
-    parser.add_argument("--batch-size", type=int, default=100, help='Training batch size')
+    parser.add_argument("--batch-size", type=int, default=1024, help='Training batch size')
     parser.add_argument("--test-batch-size", type=int, default=1024, help='Testing and classification set batch size')
     parser.add_argument('--seed', type=int, default=0, help="Seed for randomness")
     parser.add_argument('--temperature', type=float, default=0.5, help='InfoNCE temperature')
